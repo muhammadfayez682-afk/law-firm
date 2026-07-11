@@ -61,6 +61,26 @@ export function caseVisibilityWhere(user: SessionUser): Prisma.CaseWhereInput {
   };
 }
 
+/**
+ * رؤية العملاء:
+ * - الشريك/المحامي الأول (الإدارة): كل العملاء.
+ * - المحاسب: كل العملاء (لأغراض الفوترة) لكن دون تفاصيل القضايا (تُخفى في الواجهة).
+ * - غيرهم: فقط عملاء القضايا التي يملك المستخدم صلاحية رؤيتها (عضوية فريق/تفويض).
+ */
+export function clientVisibilityWhere(user: SessionUser): Prisma.ClientWhereInput {
+  if (isManagement(user.role) || user.role === "accountant") return {};
+  return { cases: { some: caseVisibilityWhere(user) } };
+}
+
+/** فحص صلاحية عميل واحد — يطابق clientVisibilityWhere لكن على كائن محمّل مسبقًا. */
+export function canAccessClient(
+  user: SessionUser,
+  client: { cases: CaseAccessInput[] }
+): boolean {
+  if (isManagement(user.role) || user.role === "accountant") return true;
+  return client.cases.some((c) => canAccessCase(user, c));
+}
+
 export function canCreateCase(role: UserRole): boolean {
   return role === "partner" || role === "senior_lawyer" || role === "lawyer";
 }
@@ -72,6 +92,15 @@ export function canEditCase(user: SessionUser, caseData: CaseAccessInput): boole
 
 export function canManageInvoices(role: UserRole): boolean {
   return role === "partner" || role === "accountant";
+}
+
+/** إدارة المستخدمين وسجل التدقيق صلاحية حصرية للشريك. */
+export function canManageUsers(role: UserRole): boolean {
+  return role === "partner";
+}
+
+export function canViewAuditLog(role: UserRole): boolean {
+  return role === "partner";
 }
 
 export function canManageTemplates(role: UserRole): boolean {

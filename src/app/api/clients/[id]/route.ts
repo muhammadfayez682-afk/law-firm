@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessClient } from "@/lib/rbac";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,12 +18,19 @@ export async function GET(_request: NextRequest, { params }: Params) {
     where: { id },
     include: {
       agencies: { orderBy: { expiryDate: "asc" } },
-      cases: { orderBy: { createdAt: "desc" }, include: { responsibleLawyer: true } },
+      cases: {
+        orderBy: { createdAt: "desc" },
+        include: { responsibleLawyer: true, team: true, accessOverrides: true },
+      },
     },
   });
 
   if (!client) {
     return NextResponse.json({ error: "العميل غير موجود" }, { status: 404 });
+  }
+
+  if (!canAccessClient(session.user, client)) {
+    return NextResponse.json({ error: "لا تملك صلاحية الاطّلاع على هذا العميل" }, { status: 403 });
   }
 
   return NextResponse.json(client);

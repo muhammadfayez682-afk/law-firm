@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { UserRole } from "@prisma/client";
+import { canManageInvoices, canManageUsers, canViewAuditLog, isManagement } from "@/lib/rbac";
 import type { NavItem } from "@/types";
 
 type NavGroup = {
@@ -9,27 +11,53 @@ type NavGroup = {
   items: NavItem[];
 };
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "الرئيسية",
-    items: [{ href: "/dashboard", label: "لوحة التحكم", icon: "dashboard" }],
-  },
-  {
-    label: "إدارة القضايا",
-    items: [
-      { href: "/cases", label: "القضايا", icon: "cases" },
-      { href: "/clients", label: "العملاء", icon: "clients" },
-      { href: "/calendar", label: "التقويم والجلسات", icon: "calendar" },
-    ],
-  },
-  {
-    label: "الأدوات",
-    items: [
-      { href: "/templates", label: "النماذج", icon: "templates" },
-      { href: "/reports", label: "التقارير والأداء", icon: "reports" },
-    ],
-  },
-];
+function buildNavGroups(role: UserRole): NavGroup[] {
+  const groups: NavGroup[] = [
+    {
+      label: "الرئيسية",
+      items: [{ href: "/dashboard", label: "لوحة التحكم", icon: "dashboard" }],
+    },
+    {
+      label: "إدارة القضايا",
+      items: [
+        { href: "/cases", label: "القضايا", icon: "cases" },
+        { href: "/clients", label: "العملاء", icon: "clients" },
+        { href: "/sessions", label: "الجلسات", icon: "sessions" },
+        { href: "/calendar", label: "التقويم", icon: "calendar" },
+      ],
+    },
+    {
+      label: "الأدوات",
+      items: [
+        { href: "/templates", label: "النماذج", icon: "templates" },
+        { href: "/reports", label: "التقارير والأداء", icon: "reports" },
+      ],
+    },
+  ];
+
+  if (canManageInvoices(role)) {
+    groups.push({
+      label: "المالية",
+      items: [{ href: "/invoices", label: "الفواتير والمصاريف", icon: "invoices" }],
+    });
+  }
+
+  const adminItems: NavItem[] = [];
+  if (canManageUsers(role)) {
+    adminItems.push({ href: "/settings/users", label: "المستخدمون", icon: "users" });
+  }
+  if (canViewAuditLog(role)) {
+    adminItems.push({ href: "/audit", label: "سجل التدقيق", icon: "audit" });
+  }
+  if (isManagement(role)) {
+    adminItems.push({ href: "/settings/case-flows", label: "مسارات القضايا", icon: "settings" });
+  }
+  if (adminItems.length > 0) {
+    groups.push({ label: "الإدارة", items: adminItems });
+  }
+
+  return groups;
+}
 
 const ICONS: Record<NavItem["icon"], React.ReactNode> = {
   dashboard: (
@@ -55,6 +83,38 @@ const ICONS: Record<NavItem["icon"], React.ReactNode> = {
     <path
       d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"
       strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  sessions: (
+    <path
+      d="M12 8v4l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  invoices: (
+    <path
+      d="M6 2h9l3 3v15l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2L6 22V2zM9 8h6M9 12h6M9 16h4"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  users: (
+    <path
+      d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM17 11l2 2 4-4"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  audit: (
+    <path
+      d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10zM9 12l2 2 4-4"
+      strokeWidth="1.6"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -88,25 +148,15 @@ const ICONS: Record<NavItem["icon"], React.ReactNode> = {
 export function Sidebar({
   fullName,
   roleLabel,
-  isManagement = false,
+  role,
 }: {
   fullName: string;
   roleLabel: string;
-  isManagement?: boolean;
+  role: UserRole;
 }) {
   const pathname = usePathname();
 
-  const navGroups = isManagement
-    ? [
-        ...NAV_GROUPS,
-        {
-          label: "الإعدادات",
-          items: [
-            { href: "/settings/case-flows", label: "مسارات القضايا", icon: "settings" as const },
-          ],
-        },
-      ]
-    : NAV_GROUPS;
+  const navGroups = buildNavGroups(role);
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-col bg-navy text-white h-screen sticky top-0">

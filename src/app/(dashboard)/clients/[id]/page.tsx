@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import type { CaseStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { canAccessClient } from "@/lib/rbac";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { formatDualDate } from "@/lib/dateUtils";
 import { toEnglishDigits } from "@/lib/formatNumber";
@@ -38,13 +39,16 @@ export default async function ClientDetailPage({
       agencies: { orderBy: { expiryDate: "asc" } },
       cases: {
         orderBy: { createdAt: "desc" },
-        include: { responsibleLawyer: true },
+        include: { responsibleLawyer: true, team: true, accessOverrides: true },
       },
     },
   });
 
   if (!client) notFound();
+  if (!canAccessClient(session.user, client)) notFound();
 
+  // المحاسب يرى بيانات العميل لأغراض الفوترة لكن دون تفاصيل قضاياه.
+  const canSeeCases = session.user.role !== "accountant";
   const isActive = client.cases.some((c) => !CLOSED_STATUSES.includes(c.status));
   const now = new Date();
 
@@ -66,31 +70,33 @@ export default async function ClientDetailPage({
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-semibold text-navy">قضايا العميل</h2>
-            {client.cases.length === 0 ? (
-              <p className="text-sm text-foreground/50">لا توجد قضايا مسجّلة لهذا العميل</p>
-            ) : (
-              <ul className="divide-y divide-black/5">
-                {client.cases.map((c) => (
-                  <li key={c.id} className="py-2.5">
-                    <Link
-                      href={`/cases/${c.id}`}
-                      className="flex items-center justify-between text-sm hover:text-taradhi"
-                    >
-                      <div>
-                        <p className="font-medium text-navy">{c.title}</p>
-                        <p className="text-xs text-foreground/50">
-                          {c.internalNumber} · {c.responsibleLawyer.fullName}
-                        </p>
-                      </div>
-                      <CaseStatusBadge status={c.status} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          {canSeeCases && (
+            <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+              <h2 className="mb-3 font-semibold text-navy">قضايا العميل</h2>
+              {client.cases.length === 0 ? (
+                <p className="text-sm text-foreground/50">لا توجد قضايا مسجّلة لهذا العميل</p>
+              ) : (
+                <ul className="divide-y divide-black/5">
+                  {client.cases.map((c) => (
+                    <li key={c.id} className="py-2.5">
+                      <Link
+                        href={`/cases/${c.id}`}
+                        className="flex items-center justify-between text-sm hover:text-taradhi"
+                      >
+                        <div>
+                          <p className="font-medium text-navy">{c.title}</p>
+                          <p className="text-xs text-foreground/50">
+                            {c.internalNumber} · {c.responsibleLawyer.fullName}
+                          </p>
+                        </div>
+                        <CaseStatusBadge status={c.status} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          )}
 
           <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
             <h2 className="mb-3 font-semibold text-navy">الوكالات المرتبطة</h2>

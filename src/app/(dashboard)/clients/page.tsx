@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import type { CaseStatus, ClientType, Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { clientVisibilityWhere } from "@/lib/rbac";
 import { ClientsToolbar } from "./ClientsToolbar";
 
 const CLOSED_STATUSES: CaseStatus[] = ["closed", "archived"];
@@ -25,6 +26,7 @@ export default async function ClientsPage({
   const params = await searchParams;
 
   const where: Prisma.ClientWhereInput = {
+    ...clientVisibilityWhere(session.user),
     ...(params.type ? { type: params.type as ClientType } : {}),
     ...(params.q
       ? {

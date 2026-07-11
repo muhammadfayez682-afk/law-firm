@@ -30,5 +30,16 @@ export type KpiCard = {
 export type NavItem = {
   href: string;
   label: string;
-  icon: "dashboard" | "cases" | "clients" | "calendar" | "templates" | "reports" | "settings";
+  icon:
+    | "dashboard"
+    | "cases"
+    | "clients"
+    | "calendar"
+    | "sessions"
+    | "templates"
+    | "reports"
+    | "invoices"
+    | "users"
+    | "audit"
+    | "settings";
 };

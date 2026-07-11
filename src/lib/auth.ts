@@ -36,6 +36,9 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) return null;
 
+        // الحسابات المعطّلة (soft disable) لا تستطيع تسجيل الدخول.
+        if (!user.isActive) return null;
+
         const isValidPassword = await bcrypt.compare(
           credentials.password,
           user.password
