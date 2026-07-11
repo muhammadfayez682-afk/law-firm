@@ -60,6 +60,7 @@ export async function getDashboardStats(user: SessionUser) {
     weekSessions,
     qiwaSettlementCases,
     overdueSessions,
+    pendingClosureCount,
     recentCasesRaw,
     upcomingSessionsRaw,
     qiwaCasesForAlerts,
@@ -75,6 +76,9 @@ export async function getDashboardStats(user: SessionUser) {
     }),
     prisma.session.count({
       where: { case: caseWhere, sessionDate: { lt: now }, status: "scheduled" },
+    }),
+    prisma.case.count({
+      where: { ...caseWhere, status: "pending_closure" },
     }),
     prisma.case.findMany({
       where: caseWhere,
@@ -133,6 +137,7 @@ export async function getDashboardStats(user: SessionUser) {
     weekSessions,
     qiwaSettlementCases,
     overdueSessions,
+    pendingClosureCount,
     recentCases,
     upcomingSessions,
     qiwaAlerts,

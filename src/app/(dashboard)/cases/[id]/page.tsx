@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessCase, canEditCase } from "@/lib/rbac";
+import { canAccessCase, canEditCase, isPartner } from "@/lib/rbac";
 import { getAmicableSettlementPlatform, getCaseFlowStages, getFirstStage } from "@/lib/caseFlow";
 import { CaseDetailView } from "./CaseDetailView";
 
@@ -27,6 +27,8 @@ export default async function CaseDetailPage({
       documents: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
       sessions: { orderBy: { sessionDate: "asc" } },
       amicableSettlement: true,
+      closureRequest: { include: { requestedBy: true, approvedBy: true } },
+      reopenLogs: { include: { reopenedBy: true }, orderBy: { reopenedAt: "desc" } },
     },
   });
 
@@ -51,6 +53,8 @@ export default async function CaseDetailPage({
       flowStages={flowStages}
       firstStage={firstStage}
       settlementPlatform={settlementPlatform}
+      currentUserId={session.user.id}
+      isPartner={isPartner(session.user.role)}
     />
   );
 }

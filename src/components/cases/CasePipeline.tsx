@@ -6,6 +6,7 @@ function getDirectToCourtStep(status: CaseStatus): number {
   switch (status) {
     case "intake":
       return 0;
+    case "pending_closure":
     case "closed":
     case "archived":
       return 2;
@@ -27,6 +28,7 @@ function getActiveStageOrder(status: CaseStatus, totalStages: number): number {
       return Math.min(2, totalStages);
     case "appealed":
       return Math.min(3, totalStages);
+    case "pending_closure":
     case "closed":
     case "archived":
       return totalStages;

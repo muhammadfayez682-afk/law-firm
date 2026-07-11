@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { CASE_OUTCOME_LABELS_AR, isWinningOutcome } from "@/lib/caseClosure";
 
 function getMonthRange(now: Date) {
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -12,6 +13,7 @@ export async function getReportsStats() {
 
   const [
     closedThisMonth,
+    closedCasesCount,
     outcomeCounts,
     settledAmicablyCount,
     dueInvoices,
@@ -22,7 +24,12 @@ export async function getReportsStats() {
     prisma.case.count({
       where: { status: "closed", closedDate: { gte: monthStart, lte: monthEnd } },
     }),
-    prisma.case.groupBy({ by: ["outcome"], _count: true, where: { outcome: { not: null } } }),
+    prisma.case.count({ where: { status: "closed" } }),
+    prisma.case.groupBy({
+      by: ["outcome"],
+      _count: true,
+      where: { status: "closed", outcome: { not: null } },
+    }),
     prisma.case.count({ where: { status: "settled_amicably" } }),
     prisma.invoice.aggregate({
       where: { status: { in: ["due", "overdue"] } },
@@ -37,9 +44,22 @@ export async function getReportsStats() {
     }),
   ]);
 
-  const won = outcomeCounts.find((o) => o.outcome === "won")?._count ?? 0;
-  const totalWithOutcome = outcomeCounts.reduce((sum, o) => sum + o._count, 0);
-  const winRate = totalWithOutcome > 0 ? Math.round((won / totalWithOutcome) * 100) : null;
+  // معدل الكسب = (كسب كامل + كسب جزئي) ÷ إجمالي القضايا المغلقة × 100.
+  const won = outcomeCounts
+    .filter((o) => o.outcome && isWinningOutcome(o.outcome))
+    .reduce((sum, o) => sum + o._count, 0);
+  const winRate = closedCasesCount > 0 ? Math.round((won / closedCasesCount) * 100) : null;
+
+  const outcomeDistribution = outcomeCounts
+    .filter((o): o is typeof o & { outcome: NonNullable<typeof o.outcome> } => o.outcome !== null)
+    .map((o) => ({
+      outcome: o.outcome,
+      label: CASE_OUTCOME_LABELS_AR[o.outcome],
+      count: o._count,
+      percentage: closedCasesCount > 0 ? Math.round((o._count / closedCasesCount) * 100) : 0,
+    }));
+
+  const settledCount = outcomeCounts.find((o) => o.outcome === "settled")?._count ?? 0;
 
   const caseTypeDistribution = caseTypeCounts.map((c) => ({
     caseType: c.caseType,
@@ -49,7 +69,7 @@ export async function getReportsStats() {
 
   const lawyerPerformance = await Promise.all(
     lawyers.map(async (lawyer) => {
-      const [activeCases, sessionsThisMonth, lawyerOutcomes] = await Promise.all([
+      const [activeCases, sessionsThisMonth, lawyerClosedCount, lawyerOutcomes] = await Promise.all([
         prisma.case.count({
           where: {
             responsibleLawyerId: lawyer.id,
@@ -62,16 +82,19 @@ export async function getReportsStats() {
             sessionDate: { gte: monthStart, lte: monthEnd },
           },
         }),
+        prisma.case.count({ where: { responsibleLawyerId: lawyer.id, status: "closed" } }),
         prisma.case.groupBy({
           by: ["outcome"],
           _count: true,
-          where: { responsibleLawyerId: lawyer.id, outcome: { not: null } },
+          where: { responsibleLawyerId: lawyer.id, status: "closed", outcome: { not: null } },
         }),
       ]);
 
-      const lawyerWon = lawyerOutcomes.find((o) => o.outcome === "won")?._count ?? 0;
-      const lawyerTotal = lawyerOutcomes.reduce((sum, o) => sum + o._count, 0);
-      const lawyerWinRate = lawyerTotal > 0 ? Math.round((lawyerWon / lawyerTotal) * 100) : null;
+      const lawyerWon = lawyerOutcomes
+        .filter((o) => o.outcome && isWinningOutcome(o.outcome))
+        .reduce((sum, o) => sum + o._count, 0);
+      const lawyerWinRate =
+        lawyerClosedCount > 0 ? Math.round((lawyerWon / lawyerClosedCount) * 100) : null;
 
       return {
         lawyerId: lawyer.id,
@@ -85,7 +108,10 @@ export async function getReportsStats() {
 
   return {
     closedThisMonth,
+    closedCasesCount,
     winRate,
+    outcomeDistribution,
+    settledCount,
     settledAmicablyCount,
     dueInvoicesTotal: Number(dueInvoices._sum.amount ?? 0),
     dueInvoicesCount: dueInvoices._count,

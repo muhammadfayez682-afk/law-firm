@@ -14,6 +14,7 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "on_hold", label: "معلّقة" },
   { value: "ruled_first_instance", label: "حُكم ابتدائي" },
   { value: "appealed", label: "مستأنفة" },
+  { value: "pending_closure", label: "بانتظار اعتماد الإغلاق" },
   { value: "closed", label: "مغلقة" },
   { value: "archived", label: "مؤرشفة" },
 ];

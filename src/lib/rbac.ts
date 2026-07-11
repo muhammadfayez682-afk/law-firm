@@ -25,6 +25,11 @@ export function isManagement(role: UserRole): boolean {
   return MANAGEMENT_ROLES.includes(role);
 }
 
+/** اعتماد/رفض إغلاق القضية وإعادة فتحها صلاحية حصرية للشريك، أضيق من isManagement. */
+export function isPartner(role: UserRole): boolean {
+  return role === "partner";
+}
+
 /** الشركاء والمحامون الأوائل يرون كل القضايا؛ غيرهم يحتاج عضوية الفريق أو تفويض صريح، مع احترام DENY صريح دائمًا. */
 export function canAccessCase(user: SessionUser, caseData: CaseAccessInput): boolean {
   const override = caseData.accessOverrides.find((o) => o.userId === user.id);

@@ -31,6 +31,9 @@ model User {
   createdTemplates    Template[]
   auditLogs           AuditLog[]
   filledTemplates     FilledTemplate[]
+  closureRequests     CaseClosureRequest[] @relation("ClosureRequester")
+  closureApprovals    CaseClosureRequest[] @relation("ClosureApprover")
+  reopenActions       CaseReopenLog[]      @relation("ReopenedBy")
 
   @@map("users")
 }
@@ -107,6 +110,7 @@ enum CaseStatus {
   on_hold
   ruled_first_instance
   appealed
+  pending_closure
   closed
   archived
 }
@@ -118,9 +122,13 @@ enum CasePriority {
 }
 
 enum CaseOutcome {
-  won
+  won_full
+  won_partial
   lost
-  neutral
+  settled
+  withdrawn
+  dismissed
+  client_terminated
 }
 
 model Case {
@@ -153,6 +161,8 @@ model Case {
   expenses               Expense[]
   amicableSettlement     AmicableSettlement?
   filledTemplates        FilledTemplate[]
+  closureRequest         CaseClosureRequest?
+  reopenLogs             CaseReopenLog[]
 
   @@map("cases")
 }
@@ -397,6 +407,52 @@ model FilledTemplate {
   @@index([templateKey])
   @@index([caseId])
   @@map("filled_templates")
+}
+
+enum ClosureReason {
+  final_judgment
+  settlement
+  withdrawal
+  agency_revoked
+  statute_barred
+  other
+}
+
+enum ClosureStatus {
+  pending_approval
+  approved
+  rejected
+}
+
+model CaseClosureRequest {
+  id            String        @id @default(uuid())
+  case          Case          @relation(fields: [caseId], references: [id])
+  caseId        String        @unique
+  outcome       CaseOutcome
+  closureReason ClosureReason
+  closureNotes  String
+  requestedBy   User          @relation("ClosureRequester", fields: [requestedById], references: [id])
+  requestedById String
+  requestedAt   DateTime      @default(now())
+  status        ClosureStatus @default(pending_approval)
+  approvedBy    User?         @relation("ClosureApprover", fields: [approvedById], references: [id])
+  approvedById  String?
+  approvedAt    DateTime?
+  rejectionNote String?
+
+  @@map("case_closure_requests")
+}
+
+model CaseReopenLog {
+  id           String   @id @default(uuid())
+  case         Case     @relation(fields: [caseId], references: [id])
+  caseId       String
+  reopenedBy   User     @relation("ReopenedBy", fields: [reopenedById], references: [id])
+  reopenedById String
+  reason       String
+  reopenedAt   DateTime @default(now())
+
+  @@map("case_reopen_logs")
 }
 
 model CaseFlowStage {

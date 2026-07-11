@@ -76,6 +76,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: check.reason }, { status: 400 });
     }
   }
+
+  if (status === "closed" || status === "pending_closure") {
+    return NextResponse.json(
+      { error: "إغلاق القضية يتم فقط عبر نظام طلب الإغلاق والاعتماد" },
+      { status: 400 }
+    );
+  }
   const hasDirectFieldUpdate =
     title !== undefined ||
     status !== undefined ||

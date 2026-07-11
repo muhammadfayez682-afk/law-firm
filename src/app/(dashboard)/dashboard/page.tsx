@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getDashboardStats } from "@/lib/dashboard-stats";
 import { getDayNameAr, formatTime } from "@/lib/dateUtils";
+import { isPartner } from "@/lib/rbac";
 
 function getStatusDisplay(status: string, isOverdue: boolean) {
   if (isOverdue) {
@@ -45,6 +46,18 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {isPartner(session.user.role) && stats.pendingClosureCount > 0 && (
+        <Link
+          href="/cases?status=pending_closure"
+          className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-5 py-4 transition-colors hover:bg-amber-100"
+        >
+          <span className="font-semibold text-amber-800">
+            طلبات إغلاق بانتظار اعتمادك: {stats.pendingClosureCount}
+          </span>
+          <span className="text-sm text-amber-700">عرض القضايا ←</span>
+        </Link>
+      )}
 
       {stats.qiwaAlerts.length > 0 && (
         <div className="rounded-xl border border-taradhi/20 bg-[#E8F0F8] p-5">

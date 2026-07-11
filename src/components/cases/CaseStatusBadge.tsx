@@ -9,6 +9,7 @@ const STATUS_CONFIG: Record<CaseStatus, { label: string; className: string }> = 
   on_hold: { label: "معلّقة", className: "bg-gray-200 text-gray-700" },
   ruled_first_instance: { label: "حُكم ابتدائي", className: "bg-purple-100 text-purple-700" },
   appealed: { label: "مستأنفة", className: "bg-orange-100 text-orange-700" },
+  pending_closure: { label: "بانتظار اعتماد الإغلاق", className: "bg-amber-100 text-amber-800" },
   closed: { label: "مغلقة", className: "bg-emerald-100 text-emerald-700" },
   archived: { label: "مؤرشفة", className: "bg-gray-100 text-gray-500" },
 };

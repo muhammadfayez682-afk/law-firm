@@ -5,8 +5,10 @@ import Link from "next/link";
 import type {
   AmicableSettlement,
   Case,
+  CaseClosureRequest,
   CaseFlowStage,
   CaseParty,
+  CaseReopenLog,
   CaseTeamMember,
   Client,
   Document,
@@ -18,9 +20,13 @@ import type {
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { SettlementPanel } from "@/components/cases/SettlementPanel";
 import { CasePipeline } from "@/components/cases/CasePipeline";
+import { ClosureRequestBanner } from "@/components/cases/ClosureRequestBanner";
+import { ClosedCaseBanner } from "@/components/cases/ClosedCaseBanner";
 import { ScheduleSessionModal } from "@/components/modals/ScheduleSessionModal";
 import { UploadDocumentModal } from "@/components/modals/UploadDocumentModal";
+import { CaseClosureModal } from "@/components/modals/CaseClosureModal";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
+import { canTransitionToPendingClosure } from "@/lib/caseClosure";
 
 type FullCase = Omit<Case, "claimValue"> & {
   claimValue: number | null;
@@ -31,6 +37,8 @@ type FullCase = Omit<Case, "claimValue"> & {
   documents: (Document & { uploadedBy: User })[];
   sessions: CaseSession[];
   amicableSettlement: AmicableSettlement | null;
+  closureRequest: (CaseClosureRequest & { requestedBy: User; approvedBy: User | null }) | null;
+  reopenLogs: (CaseReopenLog & { reopenedBy: User })[];
 };
 
 const CASE_TYPE_LABELS_AR: Record<Case["caseType"], string> = {
@@ -108,15 +116,23 @@ export function CaseDetailView({
   flowStages,
   firstStage,
   settlementPlatform,
+  currentUserId,
+  isPartner,
 }: {
   caseData: FullCase;
   canEdit: boolean;
   flowStages: CaseFlowStage[];
   firstStage: CaseFlowStage | null;
   settlementPlatform: SettlementPlatform | null;
+  currentUserId: string;
+  isPartner: boolean;
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showClosureModal, setShowClosureModal] = useState(false);
+
+  const canRequestClosure =
+    caseData.responsibleLawyerId === currentUserId && canTransitionToPendingClosure(caseData.status);
 
   const now = new Date();
   const nextSession = caseData.sessions.find((s) => new Date(s.sessionDate) >= now) ?? null;
@@ -164,9 +180,36 @@ export function CaseDetailView({
             >
               جدولة جلسة
             </button>
+            {canRequestClosure && (
+              <button
+                type="button"
+                onClick={() => setShowClosureModal(true)}
+                className="rounded-lg border border-navy px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"
+              >
+                طلب إغلاق القضية
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {caseData.status === "pending_closure" && caseData.closureRequest && (
+        <ClosureRequestBanner
+          caseId={caseData.id}
+          closureRequest={caseData.closureRequest}
+          isPartner={isPartner}
+        />
+      )}
+
+      {caseData.status === "closed" && (
+        <ClosedCaseBanner
+          caseId={caseData.id}
+          outcome={caseData.outcome}
+          closedDate={caseData.closedDate}
+          approvedByName={caseData.closureRequest?.approvedBy?.fullName ?? null}
+          isPartner={isPartner}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpis.map((kpi) => (
@@ -325,6 +368,22 @@ export function CaseDetailView({
               <p className="text-sm text-foreground/70 whitespace-pre-wrap">{caseData.notes}</p>
             </section>
           )}
+
+          {caseData.reopenLogs.length > 0 && (
+            <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+              <h2 className="mb-3 font-semibold text-navy">سجل إعادة الفتح</h2>
+              <ul className="space-y-3">
+                {caseData.reopenLogs.map((log) => (
+                  <li key={log.id} className="rounded-lg border border-black/5 px-4 py-2.5 text-sm">
+                    <p className="font-medium text-navy">
+                      {log.reopenedBy.fullName} — {formatDualDateTime(log.reopenedAt)}
+                    </p>
+                    <p className="mt-1 text-foreground/70 whitespace-pre-wrap">{log.reason}</p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </div>
 
         <div className="space-y-6">
@@ -358,6 +417,9 @@ export function CaseDetailView({
       )}
       {showUploadModal && (
         <UploadDocumentModal caseId={caseData.id} onClose={() => setShowUploadModal(false)} />
+      )}
+      {showClosureModal && (
+        <CaseClosureModal caseId={caseData.id} onClose={() => setShowClosureModal(false)} />
       )}
     </div>
   );

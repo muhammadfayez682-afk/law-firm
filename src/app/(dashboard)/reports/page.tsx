@@ -114,6 +114,36 @@ export default async function ReportsPage() {
           )}
         </div>
       </div>
+
+      <div className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-semibold text-navy">توزيع نتائج القضايا المغلقة</h2>
+          <span className="text-xs text-foreground/50">
+            القضايا المحسومة صلحًا: {stats.settledCount} من أصل {stats.closedCasesCount}
+          </span>
+        </div>
+        <div className="space-y-3">
+          {stats.outcomeDistribution.map((o) => (
+            <div key={o.outcome}>
+              <div className="mb-1 flex justify-between text-sm">
+                <span>{o.label}</span>
+                <span className="text-foreground/50">
+                  {o.count} · {o.percentage}%
+                </span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-black/5">
+                <div
+                  className="h-2 rounded-full bg-taradhi"
+                  style={{ width: `${o.percentage}%` }}
+                />
+              </div>
+            </div>
+          ))}
+          {stats.outcomeDistribution.length === 0 && (
+            <p className="text-sm text-foreground/50">لا توجد قضايا مغلقة بعد</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
