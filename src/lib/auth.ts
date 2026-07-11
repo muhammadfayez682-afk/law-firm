@@ -60,10 +60,31 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.invalid = false;
+        return token;
+      }
+
+      // على كل طلب لاحق: نتأكد أن المستخدم ما زال موجودًا ونشطًا، ونحدّث دوره.
+      // هذا يُبطل الجلسات القديمة (مستخدم محذوف بعد reset) أو المعطّلة فورًا.
+      if (token.id) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, isActive: true },
+        });
+        if (!dbUser || !dbUser.isActive) {
+          token.invalid = true;
+        } else {
+          token.role = dbUser.role;
+          token.invalid = false;
+        }
       }
       return token;
     },
     async session({ session, token }) {
+      if (token.invalid || !token.id) {
+        // جلسة لمستخدم لم يعد صالحًا — تُعاد بلا مستخدم لإجبار تسجيل دخول جديد.
+        return { ...session, user: undefined } as unknown as typeof session;
+      }
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as typeof session.user.role;
