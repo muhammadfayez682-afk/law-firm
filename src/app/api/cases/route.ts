@@ -153,7 +153,7 @@ export async function POST(request: NextRequest) {
           conflictCheckConfirmed: true,
           notes: body.notes || null,
           team: {
-            create: [{ userId: body.responsibleLawyerId, roleInCase: "lead" }],
+            create: [{ userId: body.responsibleLawyerId, roleInCase: "lawyer" }],
           },
           ...(platform
             ? {

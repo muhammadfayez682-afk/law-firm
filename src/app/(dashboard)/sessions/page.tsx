@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth/next";
 import type { Prisma, SessionStatus, SessionType } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { caseVisibilityWhere } from "@/lib/rbac";
+import { CASE_HANDLER_ROLES, caseVisibilityWhere } from "@/lib/rbac";
 import { SessionsToolbar } from "./SessionsToolbar";
 import { SessionsTable } from "./SessionsTable";
 
@@ -83,7 +83,7 @@ export default async function SessionsPage({
       },
     }),
     prisma.user.findMany({
-      where: { role: { in: ["partner", "senior_lawyer", "lawyer"] }, isActive: true },
+      where: { role: { in: CASE_HANDLER_ROLES }, isActive: true },
       orderBy: { fullName: "asc" },
     }),
   ]);

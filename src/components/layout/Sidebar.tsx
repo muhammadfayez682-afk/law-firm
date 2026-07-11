@@ -23,6 +23,10 @@ function buildNavGroups(role: UserRole): NavGroup[] {
         { href: "/cases", label: "القضايا", icon: "cases" },
         { href: "/clients", label: "العملاء", icon: "clients" },
         { href: "/sessions", label: "الجلسات", icon: "sessions" },
+        // المذكرات تظهر لمن يشارك في العمل القضائي (لا السكرتارية ولا المحاسب).
+        ...(role !== "secretary" && role !== "accountant"
+          ? [{ href: "/memos", label: "المذكرات", icon: "memos" as const }]
+          : []),
         { href: "/calendar", label: "التقويم", icon: "calendar" },
       ],
     },
@@ -123,6 +127,14 @@ const ICONS: Record<NavItem["icon"], React.ReactNode> = {
     <path
       d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M9 13h6M9 17h6"
       strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  memos: (
+    <path
+      d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M9 15l2 2 4-4"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
     />

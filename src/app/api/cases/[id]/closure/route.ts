@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isPartner } from "@/lib/rbac";
+import { isSystemAdmin } from "@/lib/rbac";
 import {
   CASE_ACTIVE_STATUS_AFTER_REJECTION,
   canRequestCaseClosure,
@@ -91,8 +91,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   }
 
-  if (!isPartner(session.user.role)) {
-    return NextResponse.json({ error: "اعتماد أو رفض إغلاق القضية صلاحية حصرية للشريك" }, { status: 403 });
+  if (!isSystemAdmin(session.user.role)) {
+    return NextResponse.json({ error: "اعتماد أو رفض إغلاق القضية صلاحية حصرية لمسؤول النظام" }, { status: 403 });
   }
 
   const { id } = await params;

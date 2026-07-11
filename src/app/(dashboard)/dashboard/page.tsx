@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { getDashboardStats } from "@/lib/dashboard-stats";
 import { getDayNameAr, formatTime } from "@/lib/dateUtils";
-import { isPartner } from "@/lib/rbac";
+import { isSystemAdmin } from "@/lib/rbac";
+import { toEnglishDigits } from "@/lib/formatNumber";
 
 function getStatusDisplay(status: string, isOverdue: boolean) {
   if (isOverdue) {
@@ -20,13 +21,32 @@ export default async function DashboardPage() {
   if (!session?.user) return null;
 
   const stats = await getDashboardStats(session.user);
+  const role = session.user.role;
 
-  const kpis = [
-    { label: "القضايا النشطة", value: stats.activeCases, accent: "border-r-navy" },
-    { label: "جلسات هذا الأسبوع", value: stats.weekSessions, accent: "border-r-gold" },
-    { label: "قضايا قيد تسوية قوى", value: stats.qiwaSettlementCases, accent: "border-r-taradhi" },
-    { label: "مواعيد متأخرة", value: stats.overdueSessions, accent: "border-r-red-500" },
-  ];
+  // مؤشرات لوحة التحكم تتكيّف مع دور المستخدم.
+  let kpis: { label: string; value: number; accent: string }[];
+  if (role === "researcher") {
+    kpis = [
+      { label: "مذكراتي قيد الكتابة", value: stats.myDraftMemos, accent: "border-r-navy" },
+      { label: "تعديلات مطلوبة", value: stats.myChangesRequestedMemos, accent: "border-r-orange-500" },
+      { label: "مذكرات معتمدة", value: stats.myApprovedMemos, accent: "border-r-emerald-500" },
+      { label: "قضاياي النشطة", value: stats.activeCases, accent: "border-r-gold" },
+    ];
+  } else if (role === "lawyer") {
+    kpis = [
+      { label: "مذكرات بانتظار مراجعتي", value: stats.memosAwaitingReview, accent: "border-r-blue-500" },
+      { label: "جلسات هذا الأسبوع", value: stats.weekSessions, accent: "border-r-gold" },
+      { label: "قضاياي النشطة", value: stats.activeCases, accent: "border-r-navy" },
+      { label: "مواعيد متأخرة", value: stats.overdueSessions, accent: "border-r-red-500" },
+    ];
+  } else {
+    kpis = [
+      { label: "القضايا النشطة", value: stats.activeCases, accent: "border-r-navy" },
+      { label: "جلسات هذا الأسبوع", value: stats.weekSessions, accent: "border-r-gold" },
+      { label: "قضايا قيد تسوية قوى", value: stats.qiwaSettlementCases, accent: "border-r-taradhi" },
+      { label: "مواعيد متأخرة", value: stats.overdueSessions, accent: "border-r-red-500" },
+    ];
+  }
 
   return (
     <div className="space-y-8">
@@ -42,18 +62,20 @@ export default async function DashboardPage() {
             className={`rounded-xl border border-black/5 border-r-4 ${kpi.accent} bg-white p-5 shadow-sm`}
           >
             <p className="text-sm text-foreground/50">{kpi.label}</p>
-            <p className="mt-2 font-amiri text-3xl font-bold text-navy">{kpi.value}</p>
+            <p className="mt-2 font-amiri text-3xl font-bold text-navy">
+              {toEnglishDigits(kpi.value)}
+            </p>
           </div>
         ))}
       </div>
 
-      {isPartner(session.user.role) && stats.pendingClosureCount > 0 && (
+      {isSystemAdmin(role) && stats.pendingClosureCount > 0 && (
         <Link
           href="/cases?status=pending_closure"
           className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-5 py-4 transition-colors hover:bg-amber-100"
         >
           <span className="font-semibold text-amber-800">
-            طلبات إغلاق بانتظار اعتمادك: {stats.pendingClosureCount}
+            طلبات إغلاق بانتظار اعتمادك: {toEnglishDigits(stats.pendingClosureCount)}
           </span>
           <span className="text-sm text-amber-700">عرض القضايا ←</span>
         </Link>

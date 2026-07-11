@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessCase, canEditCase, isPartner } from "@/lib/rbac";
+import { canAccessCase, canEditCase, isSystemAdmin } from "@/lib/rbac";
 import { getAmicableSettlementPlatform, getCaseFlowStages, getFirstStage } from "@/lib/caseFlow";
+import { canAuthorMemo, canReviewMemo } from "@/lib/memos";
 import { CaseDetailView } from "./CaseDetailView";
 
 export default async function CaseDetailPage({
@@ -29,6 +30,10 @@ export default async function CaseDetailPage({
       amicableSettlement: true,
       closureRequest: { include: { requestedBy: true, approvedBy: true } },
       reopenLogs: { include: { reopenedBy: true }, orderBy: { reopenedAt: "desc" } },
+      memos: {
+        orderBy: { updatedAt: "desc" },
+        include: { authoredBy: { select: { fullName: true } } },
+      },
     },
   });
 
@@ -46,6 +51,18 @@ export default async function CaseDetailPage({
     claimValue: caseData.claimValue ? Number(caseData.claimValue) : null,
   };
 
+  const memos = caseData.memos.map((m) => ({
+    id: m.id,
+    title: m.title,
+    memoType: m.memoType,
+    status: m.status,
+    authorName: m.authoredBy.fullName,
+    updatedAt: m.updatedAt.toISOString(),
+  }));
+  const pendingMemoReview = canReviewMemo(session.user.role)
+    ? caseData.memos.filter((m) => m.status === "submitted").length
+    : 0;
+
   return (
     <CaseDetailView
       caseData={serializedCase}
@@ -54,7 +71,10 @@ export default async function CaseDetailPage({
       firstStage={firstStage}
       settlementPlatform={settlementPlatform}
       currentUserId={session.user.id}
-      isPartner={isPartner(session.user.role)}
+      isSystemAdmin={isSystemAdmin(session.user.role)}
+      memos={memos}
+      canAddMemo={canAuthorMemo(session.user.role)}
+      pendingMemoReview={pendingMemoReview}
     />
   );
 }

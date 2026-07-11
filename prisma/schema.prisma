@@ -7,11 +7,12 @@ datasource db {
 }
 
 enum UserRole {
-  partner
-  senior_lawyer
-  lawyer
-  secretary
-  accountant
+  system_admin // مسؤول النظام — صلاحيات كاملة + اعتماد الإغلاق
+  supervisor // مشرف — مسؤول عن القضية، يحدد المسار
+  lawyer // محامي — يترافع + يعتمد المذكرات
+  researcher // باحث قانوني — يكتب المذكرات ويبحث
+  secretary // سكرتارية
+  accountant // محاسب
 }
 
 model User {
@@ -36,6 +37,9 @@ model User {
   closureApprovals    CaseClosureRequest[] @relation("ClosureApprover")
   reopenActions       CaseReopenLog[]      @relation("ReopenedBy")
   recordedExpenses    Expense[]            @relation("RecordedExpenses")
+  authoredMemos       LegalMemo[]          @relation("MemoAuthor")
+  approvedMemos       LegalMemo[]          @relation("MemoApprover")
+  memoReviews         MemoReview[]         @relation("MemoReviewer")
 
   @@map("users")
 }
@@ -165,6 +169,7 @@ model Case {
   filledTemplates        FilledTemplate[]
   closureRequest         CaseClosureRequest?
   reopenLogs             CaseReopenLog[]
+  memos                  LegalMemo[]
 
   @@map("cases")
 }
@@ -188,9 +193,9 @@ model CaseParty {
 }
 
 enum CaseTeamRole {
-  lead
-  assistant
-  supervisor
+  supervisor // المشرف — المسؤول الأول عن القضية
+  lawyer // المحامي المترافع
+  researcher // الباحث القانوني
 }
 
 model CaseTeamMember {
@@ -472,4 +477,60 @@ model CaseFlowStage {
 
   @@unique([caseType, order])
   @@map("case_flow_stages")
+}
+
+enum MemoStatus {
+  draft // مسودة — الباحث يكتب
+  submitted // مُرسلة للمحامي للمراجعة
+  changes_requested // المحامي طلب تعديلات
+  approved // معتمدة — جاهزة للتقديم
+  submitted_to_court // قُدّمت للمحكمة
+}
+
+model LegalMemo {
+  id      String @id @default(uuid())
+  case    Case   @relation(fields: [caseId], references: [id])
+  caseId  String
+
+  title    String // عنوان المذكرة
+  memoType String // مذكرة دفاع / رد / تعقيب / استئناف
+  content  String @db.Text // نص المذكرة
+
+  // البحث القانوني المرفق
+  legalBasis String? @db.Text // الأنظمة واللوائح المستند إليها
+  precedents String? @db.Text // السوابق القضائية
+  circulars  String? @db.Text // التعاميم ذات الصلة
+
+  status  MemoStatus @default(draft)
+  version Int        @default(1)
+
+  // من كتبها (باحث)
+  authoredBy   User   @relation("MemoAuthor", fields: [authoredById], references: [id])
+  authoredById String
+
+  // من اعتمدها (محامي)
+  approvedBy   User?     @relation("MemoApprover", fields: [approvedById], references: [id])
+  approvedById String?
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reviews MemoReview[]
+
+  @@map("legal_memos")
+}
+
+// سجل مراجعات المحامي
+model MemoReview {
+  id           String    @id @default(uuid())
+  memo         LegalMemo @relation(fields: [memoId], references: [id])
+  memoId       String
+  reviewedBy   User      @relation("MemoReviewer", fields: [reviewedById], references: [id])
+  reviewedById String
+  action       String // "approved" | "changes_requested"
+  comments     String    @db.Text // ملاحظات المحامي
+  reviewedAt   DateTime  @default(now())
+
+  @@map("memo_reviews")
 }

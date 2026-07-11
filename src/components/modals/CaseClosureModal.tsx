@@ -41,7 +41,7 @@ export function CaseClosureModal({ caseId, onClose }: { caseId: string; onClose:
         return;
       }
 
-      toast.success("تم إرسال طلب الإغلاق للشريك للاعتماد");
+      toast.success("تم إرسال طلب الإغلاق لمسؤول النظام للاعتماد");
       router.refresh();
       onClose();
     } finally {
@@ -130,7 +130,7 @@ export function CaseClosureModal({ caseId, onClose }: { caseId: string; onClose:
               disabled={loading}
               className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60"
             >
-              {loading ? "جارٍ الإرسال..." : "إرسال طلب الإغلاق للشريك"}
+              {loading ? "جارٍ الإرسال..." : "إرسال طلب الإغلاق لمسؤول النظام"}
             </button>
           </div>
         </form>

@@ -6,7 +6,14 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
 
-const VALID_ROLES: UserRole[] = ["partner", "senior_lawyer", "lawyer", "secretary", "accountant"];
+const VALID_ROLES: UserRole[] = [
+  "system_admin",
+  "supervisor",
+  "lawyer",
+  "researcher",
+  "secretary",
+  "accountant",
+];
 const ACTIVE_CASE_STATUSES_EXCLUDED = ["closed", "archived"] as const;
 
 /** توليد كلمة مرور مؤقتة عند عدم إدخال واحدة. */

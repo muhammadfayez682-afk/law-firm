@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canCreateCase } from "@/lib/rbac";
+import { canCreateCase, CASE_HANDLER_ROLES } from "@/lib/rbac";
 import { buildCasesWhere, CASES_PAGE_SIZE } from "@/lib/case-filters";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { CasesToolbar } from "./CasesToolbar";
@@ -59,7 +59,7 @@ export default async function CasesPage({
     prisma.case.count({ where }),
     prisma.client.findMany({ orderBy: { fullName: "asc" } }),
     prisma.user.findMany({
-      where: { role: { in: ["partner", "senior_lawyer", "lawyer"] } },
+      where: { role: { in: CASE_HANDLER_ROLES } },
       orderBy: { fullName: "asc" },
     }),
   ]);

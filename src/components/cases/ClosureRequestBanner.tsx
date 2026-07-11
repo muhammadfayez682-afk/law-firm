@@ -18,11 +18,11 @@ type ClosureRequestInfo = {
 export function ClosureRequestBanner({
   caseId,
   closureRequest,
-  isPartner,
+  isSystemAdmin,
 }: {
   caseId: string;
   closureRequest: ClosureRequestInfo;
-  isPartner: boolean;
+  isSystemAdmin: boolean;
 }) {
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
@@ -78,7 +78,7 @@ export function ClosureRequestBanner({
       <div className="mb-3 flex items-center justify-between">
         <h3 className="font-amiri text-lg font-bold text-amber-800">قيد اعتماد الإغلاق</h3>
         <span className="rounded-full bg-amber-200 px-2.5 py-1 text-xs font-medium text-amber-900">
-          بانتظار الشريك
+          بانتظار مسؤول النظام
         </span>
       </div>
 
@@ -107,7 +107,7 @@ export function ClosureRequestBanner({
         </div>
       </dl>
 
-      {isPartner && (
+      {isSystemAdmin && (
         <div className="mt-4 flex gap-2 border-t border-amber-200 pt-4">
           <button
             type="button"

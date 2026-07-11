@@ -1,12 +1,16 @@
 import type { Prisma, UserRole, DocumentVisibility } from "@prisma/client";
 
 export const ROLE_LABELS_AR: Record<UserRole, string> = {
-  partner: "شريك",
-  senior_lawyer: "محامٍ أول",
+  system_admin: "مسؤول النظام",
+  supervisor: "مشرف",
   lawyer: "محامٍ",
+  researcher: "باحث قانوني",
   secretary: "سكرتير",
   accountant: "محاسب",
 };
+
+/** الأدوار التي تتولّى القضايا فعليًا (تُسند إليها كمحامٍ مسؤول وتظهر في تقارير الأداء). */
+export const CASE_HANDLER_ROLES: UserRole[] = ["system_admin", "supervisor", "lawyer"];
 
 export type SessionUser = {
   id: string;
@@ -19,18 +23,19 @@ type CaseAccessInput = {
   accessOverrides: { userId: string; accessType: "allow" | "deny" }[];
 };
 
-const MANAGEMENT_ROLES: UserRole[] = ["partner", "senior_lawyer"];
+// مسؤول النظام فقط يملك رؤية شاملة لكل القضايا؛ بقية الأدوار عبر عضوية الفريق أو تفويض.
+const MANAGEMENT_ROLES: UserRole[] = ["system_admin"];
 
 export function isManagement(role: UserRole): boolean {
   return MANAGEMENT_ROLES.includes(role);
 }
 
-/** اعتماد/رفض إغلاق القضية وإعادة فتحها صلاحية حصرية للشريك، أضيق من isManagement. */
-export function isPartner(role: UserRole): boolean {
-  return role === "partner";
+/** اعتماد/رفض إغلاق القضية وإعادة فتحها وإدارة المستخدمين صلاحية حصرية لمسؤول النظام. */
+export function isSystemAdmin(role: UserRole): boolean {
+  return role === "system_admin";
 }
 
-/** الشركاء والمحامون الأوائل يرون كل القضايا؛ غيرهم يحتاج عضوية الفريق أو تفويض صريح، مع احترام DENY صريح دائمًا. */
+/** مسؤول النظام يرى كل القضايا؛ غيره يحتاج أن يكون محاميًا مسؤولًا، أو عضو فريق، أو صاحب تفويض allow، مع احترام DENY صريح. */
 export function canAccessCase(user: SessionUser, caseData: CaseAccessInput): boolean {
   const override = caseData.accessOverrides.find((o) => o.userId === user.id);
   if (override?.accessType === "deny") return false;
@@ -63,7 +68,7 @@ export function caseVisibilityWhere(user: SessionUser): Prisma.CaseWhereInput {
 
 /**
  * رؤية العملاء:
- * - الشريك/المحامي الأول (الإدارة): كل العملاء.
+ * - مسؤول النظام: كل العملاء.
  * - المحاسب: كل العملاء (لأغراض الفوترة) لكن دون تفاصيل القضايا (تُخفى في الواجهة).
  * - غيرهم: فقط عملاء القضايا التي يملك المستخدم صلاحية رؤيتها (عضوية فريق/تفويض).
  */
@@ -82,7 +87,7 @@ export function canAccessClient(
 }
 
 export function canCreateCase(role: UserRole): boolean {
-  return role === "partner" || role === "senior_lawyer" || role === "lawyer";
+  return role === "system_admin" || role === "supervisor" || role === "lawyer";
 }
 
 export function canEditCase(user: SessionUser, caseData: CaseAccessInput): boolean {
@@ -91,20 +96,20 @@ export function canEditCase(user: SessionUser, caseData: CaseAccessInput): boole
 }
 
 export function canManageInvoices(role: UserRole): boolean {
-  return role === "partner" || role === "accountant";
+  return role === "system_admin" || role === "accountant";
 }
 
-/** إدارة المستخدمين وسجل التدقيق صلاحية حصرية للشريك. */
+/** إدارة المستخدمين وسجل التدقيق صلاحية حصرية لمسؤول النظام. */
 export function canManageUsers(role: UserRole): boolean {
-  return role === "partner";
+  return role === "system_admin";
 }
 
 export function canViewAuditLog(role: UserRole): boolean {
-  return role === "partner";
+  return role === "system_admin";
 }
 
 export function canManageTemplates(role: UserRole): boolean {
-  return role === "partner" || role === "senior_lawyer";
+  return role === "system_admin" || role === "supervisor";
 }
 
 export function canViewDocument(
@@ -113,7 +118,7 @@ export function canViewDocument(
   caseData: CaseAccessInput | null
 ): boolean {
   if (visibilityLevel === "all_staff") return true;
-  if (visibilityLevel === "partners_only") return user.role === "partner";
+  if (visibilityLevel === "partners_only") return user.role === "system_admin";
   if (!caseData) return isManagement(user.role);
   return canAccessCase(user, caseData);
 }

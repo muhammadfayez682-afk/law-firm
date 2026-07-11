@@ -13,13 +13,13 @@ export function ClosedCaseBanner({
   outcome,
   closedDate,
   approvedByName,
-  isPartner,
+  isSystemAdmin,
 }: {
   caseId: string;
   outcome: CaseOutcome | null;
   closedDate: string | Date | null;
   approvedByName: string | null;
-  isPartner: boolean;
+  isSystemAdmin: boolean;
 }) {
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
@@ -76,7 +76,7 @@ export function ClosedCaseBanner({
         </div>
       </dl>
 
-      {isPartner && (
+      {isSystemAdmin && (
         <div className="mt-4 border-t border-emerald-200 pt-4">
           <button
             type="button"

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isPartner } from "@/lib/rbac";
+import { isSystemAdmin } from "@/lib/rbac";
 import { CASE_STATUS_AFTER_REOPEN } from "@/lib/caseClosure";
 
 type Params = { params: Promise<{ id: string }> };
@@ -13,8 +13,8 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   }
 
-  if (!isPartner(session.user.role)) {
-    return NextResponse.json({ error: "إعادة فتح القضية صلاحية حصرية للشريك" }, { status: 403 });
+  if (!isSystemAdmin(session.user.role)) {
+    return NextResponse.json({ error: "إعادة فتح القضية صلاحية حصرية لمسؤول النظام" }, { status: 403 });
   }
 
   const { id } = await params;

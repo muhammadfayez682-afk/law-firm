@@ -19,7 +19,14 @@ type ManagedUser = {
   activeCases: number;
 };
 
-const ROLE_OPTIONS: UserRole[] = ["partner", "senior_lawyer", "lawyer", "secretary", "accountant"];
+const ROLE_OPTIONS: UserRole[] = [
+  "system_admin",
+  "supervisor",
+  "lawyer",
+  "researcher",
+  "secretary",
+  "accountant",
+];
 
 const inputClass =
   "w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold";
@@ -38,7 +45,7 @@ export function UsersManager({
   const router = useRouter();
 
   const activeOwners = initialUsers.filter(
-    (u) => u.isActive && ["partner", "senior_lawyer", "lawyer"].includes(u.role)
+    (u) => u.isActive && ["system_admin", "supervisor", "lawyer"].includes(u.role)
   );
 
   async function toggleActive(user: ManagedUser) {

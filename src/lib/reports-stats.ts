@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { CASE_HANDLER_ROLES } from "@/lib/rbac";
 import { CASE_OUTCOME_LABELS_AR, isWinningOutcome } from "@/lib/caseClosure";
 
 function getMonthRange(now: Date) {
@@ -39,7 +40,7 @@ export async function getReportsStats() {
     prisma.case.groupBy({ by: ["caseType"], _count: true }),
     prisma.case.count(),
     prisma.user.findMany({
-      where: { role: { in: ["partner", "senior_lawyer", "lawyer"] } },
+      where: { role: { in: CASE_HANDLER_ROLES } },
       orderBy: { fullName: "asc" },
     }),
   ]);

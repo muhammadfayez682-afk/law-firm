@@ -8,7 +8,14 @@ import { canManageUsers } from "@/lib/rbac";
 
 type Params = { params: Promise<{ id: string }> };
 
-const VALID_ROLES: UserRole[] = ["partner", "senior_lawyer", "lawyer", "secretary", "accountant"];
+const VALID_ROLES: UserRole[] = [
+  "system_admin",
+  "supervisor",
+  "lawyer",
+  "researcher",
+  "secretary",
+  "accountant",
+];
 const ACTIVE_CASE_STATUSES_EXCLUDED = ["closed", "archived"] as const;
 
 export async function PATCH(request: NextRequest, { params }: Params) {
@@ -40,14 +47,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (!VALID_ROLES.includes(body.role)) {
       return NextResponse.json({ error: "الدور غير صالح" }, { status: 400 });
     }
-    // منع تنزيل آخر شريك نشط عن دور الشريك.
-    if (target.role === "partner" && body.role !== "partner") {
-      const otherActivePartners = await prisma.user.count({
-        where: { role: "partner", isActive: true, id: { not: id } },
+    // منع تنزيل آخر مسؤول نظام نشط عن دوره.
+    if (target.role === "system_admin" && body.role !== "system_admin") {
+      const otherActiveAdmins = await prisma.user.count({
+        where: { role: "system_admin", isActive: true, id: { not: id } },
       });
-      if (otherActivePartners === 0) {
+      if (otherActiveAdmins === 0) {
         return NextResponse.json(
-          { error: "يجب بقاء شريك واحد نشط على الأقل — لا يمكن تغيير دور آخر شريك." },
+          { error: "يجب بقاء مسؤول نظام واحد نشط على الأقل — لا يمكن تغيير دور آخر مسؤول." },
           { status: 400 }
         );
       }
@@ -63,13 +70,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     if (target.id === session.user.id) {
       return NextResponse.json({ error: "لا يمكنك تعطيل حسابك الخاص." }, { status: 400 });
     }
-    if (target.role === "partner") {
-      const otherActivePartners = await prisma.user.count({
-        where: { role: "partner", isActive: true, id: { not: id } },
+    if (target.role === "system_admin") {
+      const otherActiveAdmins = await prisma.user.count({
+        where: { role: "system_admin", isActive: true, id: { not: id } },
       });
-      if (otherActivePartners === 0) {
+      if (otherActiveAdmins === 0) {
         return NextResponse.json(
-          { error: "يجب بقاء شريك واحد نشط على الأقل." },
+          { error: "يجب بقاء مسؤول نظام واحد نشط على الأقل." },
           { status: 400 }
         );
       }

@@ -36,6 +36,7 @@ export type NavItem = {
     | "clients"
     | "calendar"
     | "sessions"
+    | "memos"
     | "templates"
     | "reports"
     | "invoices"

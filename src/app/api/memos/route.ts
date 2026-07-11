@@ -1,0 +1,87 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { canAccessCase } from "@/lib/rbac";
+import { canAuthorMemo, memoVisibilityWhere } from "@/lib/memos";
+
+export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const caseId = searchParams.get("caseId");
+
+  const memos = await prisma.legalMemo.findMany({
+    where: {
+      ...memoVisibilityWhere(session.user),
+      ...(caseId ? { caseId } : {}),
+    },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      case: { select: { id: true, title: true, internalNumber: true } },
+      authoredBy: { select: { fullName: true } },
+    },
+  });
+
+  return NextResponse.json(memos);
+}
+
+export async function POST(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) {
+    return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
+  }
+
+  if (!canAuthorMemo(session.user.role)) {
+    return NextResponse.json({ error: "كتابة المذكرات متاحة للباحث القانوني فقط" }, { status: 403 });
+  }
+
+  const body = await request.json();
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+  const memoType = typeof body.memoType === "string" ? body.memoType.trim() : "";
+  const content = typeof body.content === "string" ? body.content.trim() : "";
+
+  if (!body.caseId) return NextResponse.json({ error: "القضية مطلوبة" }, { status: 400 });
+  if (!title) return NextResponse.json({ error: "عنوان المذكرة مطلوب" }, { status: 400 });
+  if (!memoType) return NextResponse.json({ error: "نوع المذكرة مطلوب" }, { status: 400 });
+
+  // يجب أن يكون الباحث عضوًا في فريق القضية.
+  const caseData = await prisma.case.findUnique({
+    where: { id: body.caseId },
+    include: { team: true, accessOverrides: true },
+  });
+  if (!caseData) {
+    return NextResponse.json({ error: "القضية غير موجودة" }, { status: 404 });
+  }
+  if (!canAccessCase(session.user, caseData)) {
+    return NextResponse.json({ error: "لا تملك صلاحية إضافة مذكرة لهذه القضية" }, { status: 403 });
+  }
+
+  const created = await prisma.legalMemo.create({
+    data: {
+      caseId: body.caseId,
+      title,
+      memoType,
+      content,
+      legalBasis: body.legalBasis?.trim() || null,
+      precedents: body.precedents?.trim() || null,
+      circulars: body.circulars?.trim() || null,
+      authoredById: session.user.id,
+      status: "draft",
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "create",
+      resourceType: "LegalMemo",
+      resourceId: created.id,
+    },
+  });
+
+  return NextResponse.json(created, { status: 201 });
+}

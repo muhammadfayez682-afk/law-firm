@@ -7,7 +7,7 @@ import type { DocumentVisibility } from "@prisma/client";
 
 const VISIBILITY_OPTIONS: { value: DocumentVisibility; label: string }[] = [
   { value: "case_team", label: "فريق القضية فقط" },
-  { value: "partners_only", label: "الشركاء فقط" },
+  { value: "partners_only", label: "مسؤول النظام فقط" },
   { value: "all_staff", label: "جميع الموظفين" },
 ];
 

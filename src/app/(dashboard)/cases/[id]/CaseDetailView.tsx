@@ -27,6 +27,17 @@ import { UploadDocumentModal } from "@/components/modals/UploadDocumentModal";
 import { CaseClosureModal } from "@/components/modals/CaseClosureModal";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
+import { MEMO_STATUS_LABELS_AR, MEMO_STATUS_STYLES } from "@/lib/memos";
+import type { MemoStatus } from "@prisma/client";
+
+type CaseMemo = {
+  id: string;
+  title: string;
+  memoType: string;
+  status: MemoStatus;
+  authorName: string;
+  updatedAt: string;
+};
 
 type FullCase = Omit<Case, "claimValue"> & {
   claimValue: number | null;
@@ -61,14 +72,14 @@ const PARTY_ROLE_LABELS_AR: Record<CaseParty["role"], string> = {
 };
 
 const TEAM_ROLE_LABELS_AR: Record<CaseTeamMember["roleInCase"], string> = {
-  lead: "قائد الفريق",
-  assistant: "مساعد",
   supervisor: "مشرف",
+  lawyer: "محامٍ مترافع",
+  researcher: "باحث قانوني",
 };
 
 const DOCUMENT_VISIBILITY_LABELS_AR: Record<DocumentVisibility, string> = {
   case_team: "فريق القضية",
-  partners_only: "الشركاء فقط",
+  partners_only: "مسؤول النظام فقط",
   all_staff: "جميع الموظفين",
 };
 
@@ -117,7 +128,10 @@ export function CaseDetailView({
   firstStage,
   settlementPlatform,
   currentUserId,
-  isPartner,
+  isSystemAdmin,
+  memos,
+  canAddMemo,
+  pendingMemoReview,
 }: {
   caseData: FullCase;
   canEdit: boolean;
@@ -125,7 +139,10 @@ export function CaseDetailView({
   firstStage: CaseFlowStage | null;
   settlementPlatform: SettlementPlatform | null;
   currentUserId: string;
-  isPartner: boolean;
+  isSystemAdmin: boolean;
+  memos: CaseMemo[];
+  canAddMemo: boolean;
+  pendingMemoReview: number;
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -197,7 +214,7 @@ export function CaseDetailView({
         <ClosureRequestBanner
           caseId={caseData.id}
           closureRequest={caseData.closureRequest}
-          isPartner={isPartner}
+          isSystemAdmin={isSystemAdmin}
         />
       )}
 
@@ -207,7 +224,7 @@ export function CaseDetailView({
           outcome={caseData.outcome}
           closedDate={caseData.closedDate}
           approvedByName={caseData.closureRequest?.approvedBy?.fullName ?? null}
-          isPartner={isPartner}
+          isSystemAdmin={isSystemAdmin}
         />
       )}
 
@@ -233,6 +250,53 @@ export function CaseDetailView({
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold text-navy">المذكرات</h2>
+          {canAddMemo && (
+            <Link
+              href={`/memos/new?caseId=${caseData.id}`}
+              className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-light"
+            >
+              + مذكرة جديدة
+            </Link>
+          )}
+        </div>
+
+        {pendingMemoReview > 0 && (
+          <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-800">
+            {pendingMemoReview} مذكرة بانتظار مراجعتك
+          </div>
+        )}
+
+        {memos.length === 0 ? (
+          <p className="text-sm text-foreground/50">لا توجد مذكرات لهذه القضية</p>
+        ) : (
+          <ul className="divide-y divide-black/5">
+            {memos.map((memo) => (
+              <li key={memo.id} className="py-2.5">
+                <Link
+                  href={`/memos/${memo.id}`}
+                  className="flex items-center justify-between gap-3 text-sm hover:text-taradhi"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-navy">{memo.title}</p>
+                    <p className="text-xs text-foreground/50">
+                      {memo.memoType} · {memo.authorName} · {formatDualDate(memo.updatedAt)}
+                    </p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${MEMO_STATUS_STYLES[memo.status]}`}
+                  >
+                    {MEMO_STATUS_LABELS_AR[memo.status]}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {firstStage && settlementPlatform && (

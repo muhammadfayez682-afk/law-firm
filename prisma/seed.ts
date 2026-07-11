@@ -7,31 +7,41 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const passwordHash = await bcrypt.hash("Admin1234", 10);
+  const passwordHash = await bcrypt.hash("Test1234", 10);
 
-  const sara = await prisma.user.upsert({
-    where: { email: "sara@lawfirm.com" },
-    update: {},
-    create: {
-      fullName: "سارة القدوم",
-      email: "sara@lawfirm.com",
-      password: passwordHash,
-      phone: "0501234567",
-      role: "partner",
-    },
-  });
+  const userSeed = [
+    { fullName: "أنس الغامدي", email: "anas@qudum.sa", phone: "0500000001", role: "system_admin" as const },
+    { fullName: "عبدالرحمن الزهراني", email: "abdulrahman@qudum.sa", phone: "0500000002", role: "system_admin" as const },
+    { fullName: "لمياء البردي", email: "lamia@qudum.sa", phone: "0500000003", role: "lawyer" as const },
+    { fullName: "سحر السالمي", email: "sahar@qudum.sa", phone: "0500000004", role: "lawyer" as const },
+    { fullName: "عمر الثمالي", email: "omar@qudum.sa", phone: "0500000005", role: "lawyer" as const },
+    { fullName: "سلطان النمري", email: "sultan@qudum.sa", phone: "0500000006", role: "researcher" as const },
+    { fullName: "يزيد الغامدي", email: "yazid@qudum.sa", phone: "0500000007", role: "researcher" as const },
+  ];
 
-  const khalid = await prisma.user.upsert({
-    where: { email: "khalid@lawfirm.com" },
-    update: {},
-    create: {
-      fullName: "خالد المطيري",
-      email: "khalid@lawfirm.com",
-      password: passwordHash,
-      phone: "0559876543",
-      role: "lawyer",
-    },
-  });
+  const users: Record<string, { id: string; email: string }> = {};
+  for (const u of userSeed) {
+    const created = await prisma.user.upsert({
+      where: { email: u.email },
+      update: {},
+      create: {
+        fullName: u.fullName,
+        email: u.email,
+        password: passwordHash,
+        phone: u.phone,
+        role: u.role,
+      },
+    });
+    users[u.email] = created;
+  }
+
+  const anas = users["anas@qudum.sa"];
+  const abdulrahman = users["abdulrahman@qudum.sa"];
+  const lamia = users["lamia@qudum.sa"];
+  const sahar = users["sahar@qudum.sa"];
+  const omar = users["omar@qudum.sa"];
+  const sultan = users["sultan@qudum.sa"];
+  const yazid = users["yazid@qudum.sa"];
 
   const individualClient = await prisma.client.upsert({
     where: { nationalIdOrCr: "1023456789" },
@@ -87,7 +97,7 @@ async function main() {
       claimValue: 850000,
       clientId: companyClientOne.id,
       status: "in_progress",
-      responsibleLawyerId: sara.id,
+      responsibleLawyerId: lamia.id,
       priority: "high",
       conflictCheckConfirmed: true,
       notes: "مطالبة بتعويض عن تأخير تسليم المشروع.",
@@ -98,7 +108,11 @@ async function main() {
         ],
       },
       team: {
-        create: [{ userId: sara.id, roleInCase: "lead" }],
+        create: [
+          { userId: anas.id, roleInCase: "supervisor" },
+          { userId: lamia.id, roleInCase: "lawyer" },
+          { userId: sultan.id, roleInCase: "researcher" },
+        ],
       },
     },
   });
@@ -114,7 +128,7 @@ async function main() {
       claimValue: 45000,
       clientId: individualClient.id,
       status: "amicable_settlement",
-      responsibleLawyerId: khalid.id,
+      responsibleLawyerId: sahar.id,
       priority: "normal",
       conflictCheckConfirmed: true,
       notes: "قضية مطالبة بمستحقات نهاية الخدمة والإجازات المتراكمة.",
@@ -125,7 +139,11 @@ async function main() {
         ],
       },
       team: {
-        create: [{ userId: khalid.id, roleInCase: "lead" }],
+        create: [
+          { userId: abdulrahman.id, roleInCase: "supervisor" },
+          { userId: sahar.id, roleInCase: "lawyer" },
+          { userId: yazid.id, roleInCase: "researcher" },
+        ],
       },
     },
   });
@@ -157,7 +175,7 @@ async function main() {
       claimValue: 320000,
       clientId: companyClientTwo.id,
       status: "amicable_settlement",
-      responsibleLawyerId: sara.id,
+      responsibleLawyerId: omar.id,
       priority: "normal",
       conflictCheckConfirmed: true,
       notes: "نزاع بين شريكين حول توزيع الأرباح، يُنظر عبر منصة تراضي قبل رفع الدعوى.",
@@ -168,7 +186,11 @@ async function main() {
         ],
       },
       team: {
-        create: [{ userId: sara.id, roleInCase: "lead" }],
+        create: [
+          { userId: anas.id, roleInCase: "supervisor" },
+          { userId: omar.id, roleInCase: "lawyer" },
+          { userId: sultan.id, roleInCase: "researcher" },
+        ],
       },
     },
   });
@@ -197,7 +219,7 @@ async function main() {
       courtName: "محكمة الأحوال الشخصية بالدمام",
       clientId: individualClient.id,
       status: "open",
-      responsibleLawyerId: sara.id,
+      responsibleLawyerId: lamia.id,
       priority: "urgent",
       conflictCheckConfirmed: true,
       notes: "دعوى نفقة زوجة وأبناء.",
@@ -207,7 +229,11 @@ async function main() {
         ],
       },
       team: {
-        create: [{ userId: sara.id, roleInCase: "lead" }],
+        create: [
+          { userId: abdulrahman.id, roleInCase: "supervisor" },
+          { userId: lamia.id, roleInCase: "lawyer" },
+          { userId: yazid.id, roleInCase: "researcher" },
+        ],
       },
     },
   });
@@ -268,7 +294,7 @@ async function main() {
           applicableCaseTypes: [...t.applicableCaseTypes],
           content: t.content,
           placeholders: t.placeholders,
-          createdById: sara.id,
+          createdById: anas.id,
         },
       });
     }
@@ -355,9 +381,45 @@ async function main() {
     }
   }
 
+  // مذكرات تجريبية لتفعيل سير اعتماد المذكرات.
+  const memoSeed = [
+    {
+      caseId: commercialCase.id,
+      title: "مذكرة دفاع أولية — نزاع المقاولة",
+      memoType: "مذكرة دفاع",
+      content:
+        "تتلخص وقائع الدعوى في مطالبة موكلنا بالتعويض عن تأخر تسليم المشروع...\n\nنلتمس من الدائرة الموقّرة رد دعوى المدعى عليه للأسباب الآتية:",
+      legalBasis: "نظام المعاملات المدنية، المواد المنظّمة لعقود المقاولة.",
+      precedents: "حكم المحكمة التجارية رقم 44xxxxx القاضي بأحقية التعويض عند التأخر.",
+      circulars: null,
+      status: "submitted" as const,
+      authoredById: sultan.id,
+    },
+    {
+      caseId: laborCase.id,
+      title: "مذكرة رد على لائحة المدعى عليه",
+      memoType: "مذكرة رد",
+      content: "رداً على ما ورد في لائحة المدعى عليه، نفيد بما يلي...",
+      legalBasis: "نظام العمل، أحكام مكافأة نهاية الخدمة.",
+      precedents: null,
+      circulars: null,
+      status: "draft" as const,
+      authoredById: yazid.id,
+    },
+  ];
+
+  for (const m of memoSeed) {
+    const existing = await prisma.legalMemo.findFirst({
+      where: { caseId: m.caseId, title: m.title },
+    });
+    if (!existing) {
+      await prisma.legalMemo.create({ data: m });
+    }
+  }
+
   console.log("تمت تعبئة البيانات التجريبية بنجاح:");
   console.log({
-    users: [sara.email, khalid.email],
+    users: userSeed.map((u) => `${u.email} (${u.role})`),
     clients: [individualClient.fullName, companyClientOne.fullName, companyClientTwo.fullName],
     cases: [
       commercialCase.internalNumber,
@@ -367,6 +429,7 @@ async function main() {
     ],
     templates: templatesSeed.map((t) => t.name),
     caseFlowStages: caseFlowSeed.reduce((sum, g) => sum + g.stages.length, 0),
+    memos: memoSeed.length,
   });
 }
 
