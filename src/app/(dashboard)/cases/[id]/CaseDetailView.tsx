@@ -1,0 +1,364 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import type {
+  AmicableSettlement,
+  Case,
+  CaseFlowStage,
+  CaseParty,
+  CaseTeamMember,
+  Client,
+  Document,
+  DocumentVisibility,
+  Session as CaseSession,
+  SettlementPlatform,
+  User,
+} from "@prisma/client";
+import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
+import { SettlementPanel } from "@/components/cases/SettlementPanel";
+import { CasePipeline } from "@/components/cases/CasePipeline";
+import { ScheduleSessionModal } from "@/components/modals/ScheduleSessionModal";
+import { UploadDocumentModal } from "@/components/modals/UploadDocumentModal";
+import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
+
+type FullCase = Omit<Case, "claimValue"> & {
+  claimValue: number | null;
+  client: Client;
+  responsibleLawyer: User;
+  parties: (CaseParty & { linkedClient: Client | null })[];
+  team: (CaseTeamMember & { user: User })[];
+  documents: (Document & { uploadedBy: User })[];
+  sessions: CaseSession[];
+  amicableSettlement: AmicableSettlement | null;
+};
+
+const CASE_TYPE_LABELS_AR: Record<Case["caseType"], string> = {
+  general: "عام",
+  commercial: "تجارية",
+  labor: "عمالية",
+  personal_status: "أحوال شخصية",
+  criminal: "جزائية",
+  administrative: "إداري",
+  committee: "لجان",
+  arbitration: "تحكيم",
+  debt_collection: "تحصيل ديون",
+  other: "أخرى",
+};
+
+const PARTY_ROLE_LABELS_AR: Record<CaseParty["role"], string> = {
+  plaintiff: "مدعٍ",
+  defendant: "مدعى عليه",
+  third_party: "طرف ثالث",
+};
+
+const TEAM_ROLE_LABELS_AR: Record<CaseTeamMember["roleInCase"], string> = {
+  lead: "قائد الفريق",
+  assistant: "مساعد",
+  supervisor: "مشرف",
+};
+
+const DOCUMENT_VISIBILITY_LABELS_AR: Record<DocumentVisibility, string> = {
+  case_team: "فريق القضية",
+  partners_only: "الشركاء فقط",
+  all_staff: "جميع الموظفين",
+};
+
+const DOCUMENT_VISIBILITY_ICON_PATHS: Record<DocumentVisibility, string> = {
+  // قفل نصف مفتوح — مرئي لفريق القضية فقط
+  case_team: "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM8 11V7a4 4 0 118 0",
+  // قفل مغلق بالكامل — الشركاء فقط
+  partners_only:
+    "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM8 11V7a4 4 0 018 0v4",
+  // قفل مفتوح — كل الموظفين
+  all_staff:
+    "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM8 11V7a4 4 0 017.75-1.5",
+};
+
+const SESSION_TYPE_LABELS_AR: Record<CaseSession["sessionType"], string> = {
+  hearing: "مرافعة",
+  initial_listening: "استماع",
+  verdict: "نطق حكم",
+  arbitration: "تحكيم",
+  negotiation_meeting: "جلسة تسوية ودية",
+};
+
+const SESSION_STATUS_LABELS_AR: Record<CaseSession["status"], string> = {
+  scheduled: "مجدولة",
+  held: "انعقدت",
+  postponed: "مؤجلة",
+};
+
+const SESSION_STATUS_STYLES: Record<CaseSession["status"], string> = {
+  scheduled: "bg-taradhi/10 text-taradhi",
+  held: "bg-emerald-100 text-emerald-700",
+  postponed: "bg-amber-100 text-amber-700",
+};
+
+const CASE_QUICK_TEMPLATES: { key: string; label: string }[] = [
+  { key: "case_followup", label: "متابعة سير القضية" },
+  { key: "case_path", label: "تحديد مسار" },
+  { key: "session_report", label: "تقرير جلسة" },
+  { key: "case_analysis", label: "تحليل قضية" },
+];
+
+export function CaseDetailView({
+  caseData,
+  canEdit,
+  flowStages,
+  firstStage,
+  settlementPlatform,
+}: {
+  caseData: FullCase;
+  canEdit: boolean;
+  flowStages: CaseFlowStage[];
+  firstStage: CaseFlowStage | null;
+  settlementPlatform: SettlementPlatform | null;
+}) {
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+
+  const now = new Date();
+  const nextSession = caseData.sessions.find((s) => new Date(s.sessionDate) >= now) ?? null;
+
+  const kpis = [
+    { label: "النوع", value: CASE_TYPE_LABELS_AR[caseData.caseType] },
+    { label: "المحكمة", value: caseData.courtName ?? "—" },
+    {
+      label: "تاريخ الفتح",
+      value: formatDualDate(caseData.openDate),
+    },
+    {
+      label: "الجلسة القادمة",
+      value: nextSession ? formatDualDate(nextSession.sessionDate) : "لا يوجد",
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs text-foreground/50">{caseData.internalNumber}</p>
+          <h1 className="font-amiri text-2xl font-bold text-navy">{caseData.title}</h1>
+          <div className="mt-2 flex items-center gap-2">
+            <CaseStatusBadge status={caseData.status} />
+            <span className="text-xs text-foreground/50">
+              العميل: {caseData.client.fullName}
+            </span>
+          </div>
+        </div>
+
+        {canEdit && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowUploadModal(true)}
+              className="rounded-lg border border-gold px-4 py-2 text-sm font-medium text-gold hover:bg-gold/10"
+            >
+              رفع مستند
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowScheduleModal(true)}
+              className="rounded-lg bg-taradhi px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              جدولة جلسة
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {kpis.map((kpi) => (
+          <div key={kpi.label} className="rounded-xl border border-black/5 bg-white p-4 shadow-sm">
+            <p className="text-xs text-foreground/50">{kpi.label}</p>
+            <p className="mt-1.5 truncate font-amiri text-lg font-bold text-navy">{kpi.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <h2 className="mb-3 font-semibold text-navy">نماذج القضية</h2>
+        <div className="flex flex-wrap gap-2">
+          {CASE_QUICK_TEMPLATES.map((t) => (
+            <Link
+              key={t.key}
+              href={`/templates/${t.key}/fill?caseId=${caseData.id}`}
+              className="rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"
+            >
+              {t.label}
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {firstStage && settlementPlatform && (
+        <SettlementPanel
+          caseId={caseData.id}
+          stage={firstStage}
+          platform={settlementPlatform}
+          settlement={caseData.amicableSettlement}
+          canEdit={canEdit}
+        />
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-semibold text-navy">سجل الجلسات</h2>
+            {caseData.sessions.length === 0 ? (
+              <p className="text-sm text-foreground/50">لا توجد جلسات مجدولة</p>
+            ) : (
+              <ul className="space-y-2">
+                {caseData.sessions.map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex items-center justify-between rounded-lg border border-black/5 px-4 py-2.5 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium text-navy">
+                        {formatDualDateTime(s.sessionDate)}
+                      </p>
+                      <p className="text-xs text-foreground/50">
+                        {SESSION_TYPE_LABELS_AR[s.sessionType]}
+                        {s.court ? ` · ${s.court}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${SESSION_STATUS_STYLES[s.status]}`}
+                      >
+                        {SESSION_STATUS_LABELS_AR[s.status]}
+                      </span>
+                      <Link
+                        href={`/templates/session_report/fill?caseId=${caseData.id}&sessionId=${s.id}`}
+                        className="text-xs text-taradhi hover:underline"
+                      >
+                        إنشاء تقرير الجلسة
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-black/5 bg-white shadow-sm">
+            <h2 className="border-b border-black/5 px-5 py-4 font-semibold text-navy">
+              المستندات
+            </h2>
+            {caseData.documents.length === 0 ? (
+              <p className="px-5 py-6 text-sm text-foreground/50">لا توجد مستندات مرفوعة</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-right text-sm">
+                  <thead>
+                    <tr className="border-b border-black/5 text-xs text-foreground/50">
+                      <th className="px-5 py-2 font-medium">اسم المستند</th>
+                      <th className="px-5 py-2 font-medium">رفعه</th>
+                      <th className="px-5 py-2 font-medium">الصلاحية</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {caseData.documents.map((d) => (
+                      <tr key={d.id} className="border-b border-black/5 last:border-0">
+                        <td className="px-5 py-3">
+                          <a
+                            href={d.storagePath}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-taradhi hover:underline"
+                          >
+                            {d.fileName}
+                          </a>
+                        </td>
+                        <td className="px-5 py-3 text-foreground/60">{d.uploadedBy.fullName}</td>
+                        <td className="px-5 py-3">
+                          <span
+                            title={DOCUMENT_VISIBILITY_LABELS_AR[d.visibilityLevel]}
+                            className="inline-flex items-center gap-1.5 rounded-full bg-navy/5 px-2.5 py-1 text-xs text-navy"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              className="h-3.5 w-3.5"
+                            >
+                              <path
+                                d={DOCUMENT_VISIBILITY_ICON_PATHS[d.visibilityLevel]}
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                            {DOCUMENT_VISIBILITY_LABELS_AR[d.visibilityLevel]}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-semibold text-navy">الأطراف</h2>
+            <ul className="space-y-2 text-sm">
+              {caseData.parties.map((party) => (
+                <li key={party.id} className="flex items-center justify-between">
+                  <span>{party.name}</span>
+                  <span className="text-xs text-foreground/50">
+                    {PARTY_ROLE_LABELS_AR[party.role]}
+                  </span>
+                </li>
+              ))}
+              {caseData.parties.length === 0 && (
+                <p className="text-sm text-foreground/50">لا يوجد أطراف مسجّلون</p>
+              )}
+            </ul>
+          </section>
+
+          {caseData.notes && (
+            <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+              <h2 className="mb-2 font-semibold text-navy">ملاحظات</h2>
+              <p className="text-sm text-foreground/70 whitespace-pre-wrap">{caseData.notes}</p>
+            </section>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+            <h2 className="mb-3 font-semibold text-navy">الفريق المسند</h2>
+            <ul className="space-y-2 text-sm">
+              {caseData.team.map((member) => (
+                <li key={member.id} className="flex items-center justify-between">
+                  <span>{member.user.fullName}</span>
+                  <span className="text-xs text-foreground/50">
+                    {TEAM_ROLE_LABELS_AR[member.roleInCase]}
+                  </span>
+                </li>
+              ))}
+              {caseData.team.length === 0 && (
+                <p className="text-sm text-foreground/50">لا يوجد أعضاء مسندون</p>
+              )}
+            </ul>
+          </section>
+
+          <CasePipeline stages={flowStages} status={caseData.status} />
+        </div>
+      </div>
+
+      {showScheduleModal && (
+        <ScheduleSessionModal
+          caseId={caseData.id}
+          defaultCourt={caseData.courtName}
+          onClose={() => setShowScheduleModal(false)}
+        />
+      )}
+      {showUploadModal && (
+        <UploadDocumentModal caseId={caseData.id} onClose={() => setShowUploadModal(false)} />
+      )}
+    </div>
+  );
+}

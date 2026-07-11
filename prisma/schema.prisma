@@ -1,0 +1,415 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  partner
+  senior_lawyer
+  lawyer
+  secretary
+  accountant
+}
+
+model User {
+  id                  String               @id @default(uuid())
+  fullName            String
+  email               String               @unique
+  password            String
+  phone               String?
+  role                UserRole
+  twoFaEnabled        Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+  responsibleCases    Case[]               @relation("ResponsibleLawyer")
+  caseTeamMemberships CaseTeamMember[]
+  accessOverrides     CaseAccessOverride[]
+  uploadedDocuments   Document[]
+  recordedMinutes     SessionMinutes[]
+  createdTemplates    Template[]
+  auditLogs           AuditLog[]
+  filledTemplates     FilledTemplate[]
+
+  @@map("users")
+}
+
+enum ClientType {
+  individual
+  company
+}
+
+enum ClientStatus {
+  prospect
+  active
+  inactive
+  archived
+}
+
+model Client {
+  id                 String       @id @default(uuid())
+  type               ClientType
+  fullName           String
+  nationalIdOrCr     String?      @unique
+  nationality        String?
+  representativeName String?
+  phone              String?
+  email              String?
+  status             ClientStatus @default(prospect)
+  createdAt          DateTime     @default(now())
+  cases              Case[]
+  agencies           Agency[]
+  caseParties        CaseParty[]
+  invoices           Invoice[]
+
+  @@map("clients")
+}
+
+enum AgencyType {
+  general
+  special
+}
+
+model Agency {
+  id           String     @id @default(uuid())
+  client       Client     @relation(fields: [clientId], references: [id])
+  clientId     String
+  agencyNumber String
+  agencyType   AgencyType
+  scopeText    String
+  issueDate    DateTime
+  expiryDate   DateTime
+  documentId   String?
+
+  @@map("agencies")
+}
+
+enum CaseType {
+  general
+  commercial
+  labor
+  personal_status
+  criminal
+  administrative
+  committee
+  arbitration
+  debt_collection
+  other
+}
+
+enum CaseStatus {
+  intake
+  amicable_settlement
+  settled_amicably
+  open
+  in_progress
+  on_hold
+  ruled_first_instance
+  appealed
+  closed
+  archived
+}
+
+enum CasePriority {
+  normal
+  high
+  urgent
+}
+
+enum CaseOutcome {
+  won
+  lost
+  neutral
+}
+
+model Case {
+  id                     String                  @id @default(uuid())
+  internalNumber         String                  @unique
+  courtCaseNumber        String?
+  title                  String
+  caseType               CaseType
+  courtName              String?
+  claimValue             Decimal?                @db.Decimal(14, 2)
+  client                 Client                  @relation(fields: [clientId], references: [id])
+  clientId               String
+  status                 CaseStatus              @default(intake)
+  outcome                CaseOutcome?
+  openDate               DateTime                @default(now())
+  closedDate             DateTime?
+  responsibleLawyer      User                    @relation("ResponsibleLawyer", fields: [responsibleLawyerId], references: [id])
+  responsibleLawyerId    String
+  priority               CasePriority            @default(normal)
+  conflictCheckConfirmed Boolean                 @default(false)
+  notes                  String?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  parties                CaseParty[]
+  team                   CaseTeamMember[]
+  accessOverrides        CaseAccessOverride[]
+  documents              Document[]
+  sessions               Session[]
+  invoices               Invoice[]
+  expenses               Expense[]
+  amicableSettlement     AmicableSettlement?
+  filledTemplates        FilledTemplate[]
+
+  @@map("cases")
+}
+
+enum PartyRole {
+  plaintiff
+  defendant
+  third_party
+}
+
+model CaseParty {
+  id             String    @id @default(uuid())
+  case           Case      @relation(fields: [caseId], references: [id])
+  caseId         String
+  role           PartyRole
+  name           String
+  linkedClient   Client?   @relation(fields: [linkedClientId], references: [id])
+  linkedClientId String?
+
+  @@map("case_parties")
+}
+
+enum CaseTeamRole {
+  lead
+  assistant
+  supervisor
+}
+
+model CaseTeamMember {
+  id         String       @id @default(uuid())
+  case       Case         @relation(fields: [caseId], references: [id])
+  caseId     String
+  user       User         @relation(fields: [userId], references: [id])
+  userId     String
+  roleInCase CaseTeamRole
+  assignedAt DateTime     @default(now())
+
+  @@unique([caseId, userId])
+  @@map("case_team_members")
+}
+
+enum AccessType {
+  deny
+  allow
+}
+
+model CaseAccessOverride {
+  id         String     @id @default(uuid())
+  case       Case       @relation(fields: [caseId], references: [id])
+  caseId     String
+  user       User       @relation(fields: [userId], references: [id])
+  userId     String
+  accessType AccessType
+  reason     String?
+
+  @@unique([caseId, userId])
+  @@map("case_access_overrides")
+}
+
+enum DocumentVisibility {
+  case_team
+  partners_only
+  all_staff
+}
+
+model Document {
+  id               String                   @id @default(uuid())
+  case             Case?                    @relation(fields: [caseId], references: [id])
+  caseId           String?
+  uploadedBy       User                     @relation(fields: [uploadedById], references: [id])
+  uploadedById     String
+  fileName         String
+  storagePath      String
+  category         String?
+  visibilityLevel  DocumentVisibility       @default(case_team)
+  version          Int                      @default(1)
+  createdAt        DateTime                 @default(now())
+
+  @@map("documents")
+}
+
+enum TemplateCategory {
+  contract
+  judicial
+  correspondence
+  settlement
+  internal_governance
+}
+
+model Template {
+  id                  String           @id @default(uuid())
+  name                String
+  category            TemplateCategory
+  applicableCaseTypes CaseType[]
+  content             String
+  placeholders        Json
+  createdBy           User             @relation(fields: [createdById], references: [id])
+  createdById         String
+  updatedAt           DateTime         @updatedAt
+
+  @@map("templates")
+}
+
+enum SessionType {
+  negotiation_meeting
+  hearing
+  initial_listening
+  verdict
+  arbitration
+}
+
+enum SessionStatus {
+  scheduled
+  held
+  postponed
+}
+
+model Session {
+  id             String          @id @default(uuid())
+  case           Case            @relation(fields: [caseId], references: [id])
+  caseId         String
+  sessionType    SessionType
+  sessionDate    DateTime
+  hijriDate      String?
+  court          String?
+  reminderBefore Int?
+  status         SessionStatus   @default(scheduled)
+  minutes        SessionMinutes?
+  filledTemplates FilledTemplate[]
+
+  @@map("sessions")
+}
+
+model SessionMinutes {
+  id           String   @id @default(uuid())
+  session      Session  @relation(fields: [sessionId], references: [id])
+  sessionId    String   @unique
+  content      String
+  recordedBy   User     @relation(fields: [recordedById], references: [id])
+  recordedById String
+  createdAt    DateTime @default(now())
+
+  @@map("session_minutes")
+}
+
+enum InvoiceStatus {
+  due
+  paid
+  overdue
+}
+
+model Invoice {
+  id        String        @id @default(uuid())
+  client    Client        @relation(fields: [clientId], references: [id])
+  clientId  String
+  case      Case?         @relation(fields: [caseId], references: [id])
+  caseId    String?
+  amount    Decimal       @db.Decimal(12, 2)
+  vatAmount Decimal       @default(0) @db.Decimal(12, 2)
+  status    InvoiceStatus @default(due)
+  issueDate DateTime      @default(now())
+  dueDate   DateTime?
+
+  @@map("invoices")
+}
+
+model Expense {
+  id          String   @id @default(uuid())
+  case        Case     @relation(fields: [caseId], references: [id])
+  caseId      String
+  amount      Decimal  @db.Decimal(12, 2)
+  description String?
+  expenseDate DateTime @default(now())
+
+  @@map("expenses")
+}
+
+enum SettlementPlatform {
+  qiwa
+  taradhi
+}
+
+enum SettlementOutcome {
+  pending
+  settled
+  failed
+}
+
+model AmicableSettlement {
+  id                   String             @id @default(uuid())
+  case                 Case               @relation(fields: [caseId], references: [id])
+  caseId               String             @unique
+  platform             SettlementPlatform
+  isMandatory          Boolean            @default(false)
+  requestNumber        String?
+  firstSessionDate     DateTime?
+  deadlineDate         DateTime?
+  mediatorName         String?
+  outcome              SettlementOutcome  @default(pending)
+  settlementDocumentId String?
+  failureDocumentId    String?
+  createdAt            DateTime           @default(now())
+
+  @@map("amicable_settlements")
+}
+
+enum AuditAction {
+  view
+  create
+  update
+  delete
+}
+
+model AuditLog {
+  id           String      @id @default(uuid())
+  user         User        @relation(fields: [userId], references: [id])
+  userId       String
+  action       AuditAction
+  resourceType String
+  resourceId   String
+  ipAddress    String?
+  createdAt    DateTime    @default(now())
+
+  @@index([resourceType, resourceId])
+  @@map("audit_log")
+}
+
+model FilledTemplate {
+  id          String   @id @default(uuid())
+  templateKey String
+  caseId      String?
+  sessionId   String?
+  filledBy    String
+  data        Json
+  pdfPath     String?
+  createdAt   DateTime @default(now())
+
+  case    Case?    @relation(fields: [caseId], references: [id])
+  session Session? @relation(fields: [sessionId], references: [id])
+  user    User     @relation(fields: [filledBy], references: [id])
+
+  @@index([templateKey])
+  @@index([caseId])
+  @@map("filled_templates")
+}
+
+model CaseFlowStage {
+  id          String   @id @default(uuid())
+  caseType    CaseType
+  order       Int
+  key         String
+  labelAr     String
+  isMandatory Boolean  @default(false)
+  authority   String?
+  platformUrl String?
+  active      Boolean  @default(true)
+
+  @@unique([caseType, order])
+  @@map("case_flow_stages")
+}

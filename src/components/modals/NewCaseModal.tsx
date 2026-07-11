@@ -1,0 +1,510 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import type { CaseFlowStage, CasePriority, CaseType, Client, User } from "@prisma/client";
+
+const CASE_TYPE_OPTIONS: { value: CaseType; label: string }[] = [
+  { value: "general", label: "عام" },
+  { value: "commercial", label: "تجارية" },
+  { value: "labor", label: "عمالية" },
+  { value: "personal_status", label: "أحوال شخصية" },
+  { value: "criminal", label: "جزائية" },
+  { value: "administrative", label: "إداري" },
+  { value: "committee", label: "لجان" },
+  { value: "arbitration", label: "تحكيم" },
+  { value: "debt_collection", label: "تحصيل ديون" },
+  { value: "other", label: "أخرى" },
+];
+
+const PRIORITY_OPTIONS: { value: CasePriority; label: string }[] = [
+  { value: "normal", label: "عادية" },
+  { value: "high", label: "عالية" },
+  { value: "urgent", label: "عاجلة" },
+];
+
+const inputClass =
+  "w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold";
+const labelClass = "mb-1.5 block text-sm font-medium text-navy";
+const sectionTitleClass = "mb-3 font-amiri text-base font-bold text-navy";
+
+export function NewCaseModal({
+  clients,
+  lawyers,
+  onClose,
+}: {
+  clients: Client[];
+  lawyers: User[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const [clientMode, setClientMode] = useState<"existing" | "new">("existing");
+  const [clientType, setClientType] = useState<"individual" | "company">("individual");
+  const [conflictConfirmed, setConflictConfirmed] = useState(false);
+
+  const [allStages, setAllStages] = useState<CaseFlowStage[]>([]);
+  const [selectedCaseType, setSelectedCaseType] = useState<string>("");
+
+  useEffect(() => {
+    fetch("/api/case-flows")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: CaseFlowStage[]) => setAllStages(data))
+      .catch(() => setAllStages([]));
+  }, []);
+
+  const previewStages = allStages
+    .filter((s) => s.caseType === selectedCaseType && s.active)
+    .sort((a, b) => a.order - b.order);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    const formData = new FormData(e.currentTarget);
+    const errors: Record<string, string> = {};
+
+    const title = String(formData.get("title") || "").trim();
+    const caseType = String(formData.get("caseType") || "");
+    const responsibleLawyerId = String(formData.get("responsibleLawyerId") || "");
+    const existingClientId = String(formData.get("clientId") || "");
+    const newClientFullName = String(formData.get("newClientFullName") || "").trim();
+
+    if (!title) errors.title = "عنوان القضية مطلوب";
+    if (!caseType) errors.caseType = "نوع القضية مطلوب";
+    if (!responsibleLawyerId) errors.responsibleLawyerId = "المحامي المسؤول مطلوب";
+
+    if (clientMode === "existing" && !existingClientId) {
+      errors.clientId = "الرجاء اختيار عميل";
+    }
+    if (clientMode === "new" && !newClientFullName) {
+      errors.newClientFullName = "اسم العميل مطلوب";
+    }
+
+    const agencyNumber = String(formData.get("agencyNumber") || "").trim();
+    const scopeText = String(formData.get("scopeText") || "").trim();
+    const issueDate = String(formData.get("issueDate") || "");
+    const expiryDate = String(formData.get("expiryDate") || "");
+    const hasAgencyData = Boolean(agencyNumber || scopeText || issueDate || expiryDate);
+
+    if (hasAgencyData) {
+      if (!agencyNumber) errors.agencyNumber = "رقم الوكالة مطلوب";
+      if (!scopeText) errors.scopeText = "نطاق الوكالة مطلوب";
+      if (!issueDate) errors.issueDate = "تاريخ الإصدار مطلوب";
+      if (!expiryDate) errors.expiryDate = "تاريخ الانتهاء مطلوب";
+    }
+
+    if (!conflictConfirmed) {
+      errors.conflictCheckConfirmed = "إقرار التحقق من تعارض المصالح إلزامي";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("الرجاء تصحيح الحقول المطلوبة أدناه");
+      return;
+    }
+
+    setFieldErrors({});
+    setLoading(true);
+
+    const payload = {
+      title,
+      caseType,
+      courtName: formData.get("courtName") || null,
+      responsibleLawyerId,
+      priority: formData.get("priority"),
+      claimValue: formData.get("claimValue") || null,
+      conflictCheckConfirmed: true,
+      notes: formData.get("notes") || null,
+      ...(clientMode === "existing"
+        ? { clientId: existingClientId }
+        : {
+            newClient: {
+              type: clientType,
+              fullName: newClientFullName,
+              nationalIdOrCr: formData.get("newClientNationalIdOrCr") || null,
+              nationality: formData.get("newClientNationality") || null,
+              representativeName: formData.get("newClientRepresentativeName") || null,
+              phone: formData.get("newClientPhone") || null,
+              email: formData.get("newClientEmail") || null,
+            },
+          }),
+      ...(hasAgencyData
+        ? {
+            agency: {
+              agencyNumber,
+              agencyType: formData.get("agencyType"),
+              scopeText,
+              issueDate,
+              expiryDate,
+            },
+          }
+        : {}),
+    };
+
+    try {
+      const res = await fetch("/api/cases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        const message = data?.error ?? "تعذّر إنشاء القضية.";
+        setError(message);
+        toast.error(message);
+        return;
+      }
+
+      toast.success("تم إنشاء القضية بنجاح");
+      router.refresh();
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="font-amiri text-xl font-bold text-navy">قضية جديدة</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-foreground/40 hover:text-foreground"
+            aria-label="إغلاق"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} noValidate className="space-y-8">
+          {/* القسم 1: بيانات العميل */}
+          <section>
+            <h3 className={sectionTitleClass}>1. بيانات العميل</h3>
+
+            <div className="mb-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setClientMode("existing")}
+                className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                  clientMode === "existing"
+                    ? "bg-navy text-white"
+                    : "border border-black/10 text-navy hover:bg-black/5"
+                }`}
+              >
+                عميل حالي
+              </button>
+              <button
+                type="button"
+                onClick={() => setClientMode("new")}
+                className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                  clientMode === "new"
+                    ? "bg-navy text-white"
+                    : "border border-black/10 text-navy hover:bg-black/5"
+                }`}
+              >
+                عميل جديد
+              </button>
+            </div>
+
+            {clientMode === "existing" ? (
+              <div>
+                <label className={labelClass}>العميل</label>
+                <select name="clientId" className={inputClass}>
+                  <option value="">اختر العميل</option>
+                  {clients.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.fullName}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.clientId && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.clientId}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setClientType("individual")}
+                    className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                      clientType === "individual"
+                        ? "bg-gold text-navy"
+                        : "border border-black/10 text-navy hover:bg-black/5"
+                    }`}
+                  >
+                    فرد
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setClientType("company")}
+                    className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${
+                      clientType === "company"
+                        ? "bg-gold text-navy"
+                        : "border border-black/10 text-navy hover:bg-black/5"
+                    }`}
+                  >
+                    شركة
+                  </button>
+                </div>
+
+                <div>
+                  <label className={labelClass}>
+                    {clientType === "individual" ? "الاسم الكامل" : "اسم الشركة"}
+                  </label>
+                  <input name="newClientFullName" className={inputClass} />
+                  {fieldErrors.newClientFullName && (
+                    <p className="mt-1 text-xs text-red-600">{fieldErrors.newClientFullName}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {clientType === "individual" ? (
+                    <>
+                      <div>
+                        <label className={labelClass}>رقم الهوية</label>
+                        <input name="newClientNationalIdOrCr" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>الجنسية</label>
+                        <input name="newClientNationality" className={inputClass} />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className={labelClass}>رقم السجل التجاري</label>
+                        <input name="newClientNationalIdOrCr" className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={labelClass}>اسم الممثل</label>
+                        <input name="newClientRepresentativeName" className={inputClass} />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>الجوال</label>
+                    <input name="newClientPhone" className={inputClass} dir="ltr" />
+                  </div>
+                  <div>
+                    <label className={labelClass}>البريد الإلكتروني</label>
+                    <input name="newClientEmail" type="email" className={inputClass} dir="ltr" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* القسم 2: الوكالة */}
+          <section>
+            <h3 className={sectionTitleClass}>2. الوكالة (اختياري)</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>رقم الوكالة</label>
+                <input name="agencyNumber" className={inputClass} dir="ltr" />
+                {fieldErrors.agencyNumber && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.agencyNumber}</p>
+                )}
+              </div>
+              <div>
+                <label className={labelClass}>نوع الوكالة</label>
+                <select name="agencyType" defaultValue="general" className={inputClass}>
+                  <option value="general">عامة</option>
+                  <option value="special">خاصة</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className={labelClass}>نطاق الوكالة</label>
+                <input name="scopeText" className={inputClass} />
+                {fieldErrors.scopeText && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.scopeText}</p>
+                )}
+              </div>
+              <div>
+                <label className={labelClass}>تاريخ الإصدار</label>
+                <input name="issueDate" type="date" className={inputClass} />
+                {fieldErrors.issueDate && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.issueDate}</p>
+                )}
+              </div>
+              <div>
+                <label className={labelClass}>تاريخ الانتهاء</label>
+                <input name="expiryDate" type="date" className={inputClass} />
+                {fieldErrors.expiryDate && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.expiryDate}</p>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* القسم 3: القضية */}
+          <section>
+            <h3 className={sectionTitleClass}>3. القضية</h3>
+            <div className="space-y-4">
+              <div>
+                <label className={labelClass}>عنوان القضية</label>
+                <input name="title" className={inputClass} />
+                {fieldErrors.title && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.title}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>نوع القضية</label>
+                  <select
+                    name="caseType"
+                    value={selectedCaseType}
+                    onChange={(e) => setSelectedCaseType(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="" disabled>
+                      اختر النوع
+                    </option>
+                    {CASE_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  {fieldErrors.caseType && (
+                    <p className="mt-1 text-xs text-red-600">{fieldErrors.caseType}</p>
+                  )}
+                </div>
+                <div>
+                  <label className={labelClass}>الأولوية</label>
+                  <select name="priority" defaultValue="normal" className={inputClass}>
+                    {PRIORITY_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {selectedCaseType && (
+                <div className="rounded-lg border border-black/10 bg-navy/5 p-3">
+                  <p className="mb-2 text-xs font-medium text-foreground/60">
+                    المسار القضائي المتوقع
+                  </p>
+                  {previewStages.length > 0 ? (
+                    <ol className="space-y-1.5">
+                      {previewStages.map((stage, i) => (
+                        <li key={stage.id} className="flex items-center gap-2 text-sm">
+                          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-navy text-[11px] font-semibold text-white">
+                            {i + 1}
+                          </span>
+                          <span className="text-navy">{stage.labelAr}</span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              stage.isMandatory
+                                ? "bg-red-100 text-red-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {stage.isMandatory ? "إلزامي" : "اختياري"}
+                          </span>
+                          {stage.authority && (
+                            <span className="text-xs text-foreground/50">{stage.authority}</span>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="text-sm text-foreground/60">
+                      لا مراحل تسوية محددة — القضية تُرفع للمحكمة مباشرة
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className={labelClass}>المحامي المسؤول</label>
+                <select name="responsibleLawyerId" defaultValue="" className={inputClass}>
+                  <option value="" disabled>
+                    اختر المحامي
+                  </option>
+                  {lawyers.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.fullName}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.responsibleLawyerId && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.responsibleLawyerId}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>المحكمة</label>
+                  <input name="courtName" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>قيمة المطالبة</label>
+                  <input name="claimValue" type="number" step="0.01" className={inputClass} />
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>ملاحظات</label>
+                <textarea name="notes" rows={3} className={inputClass} />
+              </div>
+            </div>
+          </section>
+
+          <div>
+            <label className="flex items-start gap-2 text-sm text-navy">
+              <input
+                type="checkbox"
+                checked={conflictConfirmed}
+                onChange={(e) => setConflictConfirmed(e.target.checked)}
+                className="mt-0.5 rounded"
+              />
+              <span>
+                أقرّ بالتحقق من عدم وجود تعارض مصالح لهذه القضية{" "}
+                <span className="text-red-600">*</span>
+              </span>
+            </label>
+            {fieldErrors.conflictCheckConfirmed && (
+              <p className="mt-1 text-xs text-red-600">{fieldErrors.conflictCheckConfirmed}</p>
+            )}
+          </div>
+
+          {error && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+          )}
+
+          <div className="flex justify-end gap-3 border-t border-black/5 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5"
+            >
+              إلغاء
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60"
+            >
+              {loading ? "جارٍ الحفظ..." : "إنشاء القضية"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}

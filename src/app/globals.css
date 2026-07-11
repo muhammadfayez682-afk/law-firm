@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5f6f8;
+  --foreground: #12182b;
+
+  --color-navy: #12182b;
+  --color-navy-light: #1c2440;
+  --color-gold: #9a7b3c;
+  --color-gold-light: #c7a86a;
+  --color-taradhi: #1a4d7c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-navy: var(--color-navy);
+  --color-navy-light: var(--color-navy-light);
+  --color-gold: var(--color-gold);
+  --color-gold-light: var(--color-gold-light);
+  --color-taradhi: var(--color-taradhi);
+  --font-tajawal: var(--font-tajawal);
+  --font-amiri: var(--font-amiri);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-tajawal), Arial, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-amiri), serif;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-gold) transparent;
+  font-feature-settings: "lnum" 1;
+  -moz-font-feature-settings: "lnum";
+}
