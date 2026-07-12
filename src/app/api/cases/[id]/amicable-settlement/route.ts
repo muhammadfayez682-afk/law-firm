@@ -128,11 +128,17 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     },
   });
 
+  // مزامنة حالة القضية مع نتيجة التسوية — لكل الحالات، لتفادي بقاء
+  // "تمت التسوية" بعد تصحيح النتيجة إلى "فشلت" (خطأ قانوني خطير).
   if (body.outcome === "settled") {
-    await prisma.case.update({
-      where: { id },
-      data: { status: "settled_amicably" },
-    });
+    // نجاح التسوية: القضية تُحسم وديًا قبل المحكمة.
+    await prisma.case.update({ where: { id }, data: { status: "settled_amicably" } });
+  } else if (body.outcome === "failed") {
+    // فشل التسوية: القضية تنتقل لمرحلة رفع الدعوى أمام المحكمة.
+    await prisma.case.update({ where: { id }, data: { status: "open" } });
+  } else if (body.outcome === "pending") {
+    // إعادة الحالة إلى قيد التسوية الودية.
+    await prisma.case.update({ where: { id }, data: { status: "amicable_settlement" } });
   }
 
   await prisma.auditLog.create({

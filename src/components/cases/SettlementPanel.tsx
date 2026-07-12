@@ -8,9 +8,9 @@ import { formatDualDate } from "@/lib/dateUtils";
 import { toEnglishDigits } from "@/lib/formatNumber";
 
 const OUTCOME_LABELS_AR: Record<SettlementOutcome, string> = {
-  pending: "قيد النظر",
+  pending: "قيد التسوية",
   settled: "تمت التسوية",
-  failed: "فشلت التسوية",
+  failed: "تعذّر الصلح",
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;

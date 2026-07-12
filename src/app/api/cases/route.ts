@@ -6,6 +6,11 @@ import { canCreateCase } from "@/lib/rbac";
 import { buildCasesWhere, CASES_PAGE_SIZE } from "@/lib/case-filters";
 import { computeDeadlineDate, getAmicableSettlementPlatform } from "@/lib/caseFlow";
 import { OPPOSING_ROLE, PARTY_ROLE_LABELS_AR } from "@/lib/parties";
+import {
+  isValidAgencyNumber,
+  isValidNationalIdOrCr,
+  isValidSaudiPhone,
+} from "@/lib/validators";
 import type { CaseType, PartyRole } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -94,6 +99,29 @@ export async function POST(request: NextRequest) {
 
   if (newClient && !newClient.fullName) {
     return NextResponse.json({ error: "اسم العميل مطلوب" }, { status: 400 });
+  }
+
+  // تحقق من الأرقام: هوية/سجل العميل الجديد + جواله + رقم الوكالة.
+  if (newClient) {
+    const id = newClient.nationalIdOrCr?.trim();
+    if (id && !isValidNationalIdOrCr(id, newClient.type)) {
+      return NextResponse.json(
+        {
+          error:
+            newClient.type === "individual"
+              ? "رقم الهوية/الإقامة غير صحيح"
+              : "رقم السجل التجاري غير صحيح (10 أرقام)",
+        },
+        { status: 400 }
+      );
+    }
+    const phone = newClient.phone?.trim();
+    if (phone && !isValidSaudiPhone(phone)) {
+      return NextResponse.json({ error: "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)" }, { status: 400 });
+    }
+  }
+  if (agency?.agencyNumber && !isValidAgencyNumber(agency.agencyNumber.trim())) {
+    return NextResponse.json({ error: "رقم الوكالة غير صحيح (6-15 رقمًا)" }, { status: 400 });
   }
 
   const clientPartyRole = body.clientPartyRole as PartyRole | undefined;

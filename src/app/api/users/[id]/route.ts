@@ -5,6 +5,7 @@ import type { Prisma, UserRole } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
+import { isValidSaudiPhone, passwordStrengthError } from "@/lib/validators";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -41,7 +42,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data.fullName = body.fullName.trim();
   }
   if (body.phone !== undefined) {
-    data.phone = typeof body.phone === "string" && body.phone.trim() ? body.phone.trim() : null;
+    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+    if (phone && !isValidSaudiPhone(phone)) {
+      return NextResponse.json({ error: "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)" }, { status: 400 });
+    }
+    data.phone = phone || null;
   }
   if (body.role !== undefined) {
     if (!VALID_ROLES.includes(body.role)) {
@@ -61,7 +66,12 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     }
     data.role = body.role;
   }
-  if (typeof body.password === "string" && body.password.trim().length >= 6) {
+  // إعادة تعيين كلمة المرور: نرفض الكلمات الضعيفة بدل تجاهلها بصمت (كان يُظهر "تم" دون تغيير).
+  if (typeof body.password === "string" && body.password.trim()) {
+    const strengthError = passwordStrengthError(body.password.trim());
+    if (strengthError) {
+      return NextResponse.json({ error: strengthError }, { status: 400 });
+    }
     data.password = await bcrypt.hash(body.password.trim(), 10);
   }
 

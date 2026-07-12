@@ -60,6 +60,12 @@ function buildNavGroups(role: UserRole): NavGroup[] {
     groups.push({ label: "الإدارة", items: adminItems });
   }
 
+  // متاح لكل المستخدمين لتغيير كلمة المرور.
+  groups.push({
+    label: "الحساب",
+    items: [{ href: "/settings/account", label: "حسابي", icon: "settings" }],
+  });
+
   return groups;
 }
 

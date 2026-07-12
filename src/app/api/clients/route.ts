@@ -4,8 +4,28 @@ import type { CaseStatus, ClientType, Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { clientVisibilityWhere } from "@/lib/rbac";
+import { isValidNationalIdOrCr, isValidSaudiPhone } from "@/lib/validators";
 
 const CLOSED_STATUSES: CaseStatus[] = ["closed", "archived"];
+
+/** تحقق من صحة الأرقام (الهوية/السجل + الجوال) — يُعيد رسالة خطأ أو null. */
+function validateClientNumbers(body: {
+  type?: "individual" | "company";
+  nationalIdOrCr?: string | null;
+  phone?: string | null;
+}): string | null {
+  const idValue = typeof body.nationalIdOrCr === "string" ? body.nationalIdOrCr.trim() : "";
+  if (idValue && body.type && !isValidNationalIdOrCr(idValue, body.type)) {
+    return body.type === "individual"
+      ? "رقم الهوية/الإقامة غير صحيح (10 أرقام تبدأ بـ1 أو 2 مع رقم تحقق صحيح)"
+      : "رقم السجل التجاري غير صحيح (10 أرقام)";
+  }
+  const phoneValue = typeof body.phone === "string" ? body.phone.trim() : "";
+  if (phoneValue && !isValidSaudiPhone(phoneValue)) {
+    return "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)";
+  }
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -69,6 +89,11 @@ export async function POST(request: NextRequest) {
 
   if (!body.fullName || !body.type) {
     return NextResponse.json({ error: "الحقول المطلوبة ناقصة" }, { status: 400 });
+  }
+
+  const validationError = validateClientNumbers(body);
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   const created = await prisma.client.create({

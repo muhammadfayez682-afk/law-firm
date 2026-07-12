@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessClient } from "@/lib/rbac";
+import { isValidNationalIdOrCr, isValidSaudiPhone } from "@/lib/validators";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -54,6 +55,23 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   }
 
   const body = await request.json();
+
+  const idValue = typeof body.nationalIdOrCr === "string" ? body.nationalIdOrCr.trim() : "";
+  if (idValue && !isValidNationalIdOrCr(idValue, existing.type)) {
+    return NextResponse.json(
+      {
+        error:
+          existing.type === "individual"
+            ? "رقم الهوية/الإقامة غير صحيح"
+            : "رقم السجل التجاري غير صحيح (10 أرقام)",
+      },
+      { status: 400 }
+    );
+  }
+  const phoneValue = typeof body.phone === "string" ? body.phone.trim() : "";
+  if (phoneValue && !isValidSaudiPhone(phoneValue)) {
+    return NextResponse.json({ error: "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)" }, { status: 400 });
+  }
 
   const updated = await prisma.client.update({
     where: { id },

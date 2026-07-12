@@ -231,12 +231,22 @@ export async function generateTemplatePdf(
   data: FilledData
 ): Promise<Buffer> {
   const html = buildHtml(definition, data);
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    headless: true,
+    // أعلام قياسية لتشغيل Chrome على الخوادم/بيئات CI بدون sandbox.
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+  });
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "load" });
-    const pdfBytes = await page.pdf({ format: "A4", printBackground: true, margin: { top: "10mm", bottom: "10mm" } });
+    await page.setContent(html, { waitUntil: "load", timeout: 60000 });
+    // ننتظر جاهزية الخطوط المضمّنة (Amiri) لضمان تشكيل عربي صحيح قبل الطباعة.
+    await page.evaluateHandle("document.fonts.ready");
+    const pdfBytes = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "10mm", bottom: "10mm" },
+    });
     return Buffer.from(pdfBytes);
   } finally {
     await browser.close();
