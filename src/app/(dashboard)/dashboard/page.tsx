@@ -81,6 +81,38 @@ export default async function DashboardPage() {
         </Link>
       )}
 
+      {isSystemAdmin(role) && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Link href="/intake?status=conflict_check" className="rounded-xl border border-purple-200 bg-purple-50 px-5 py-4 hover:bg-purple-100">
+            <p className="text-sm text-purple-700">طلبات جديدة بانتظار التقييم</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-navy">
+              {toEnglishDigits(stats.intakeAwaitingAssessment)}
+            </p>
+          </Link>
+          <Link href="/intake?status=under_assessment" className="rounded-xl border border-orange-200 bg-orange-50 px-5 py-4 hover:bg-orange-100">
+            <p className="text-sm text-orange-700">طلبات بانتظار قرارك</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-navy">
+              {toEnglishDigits(stats.intakeAwaitingDecision)}
+            </p>
+          </Link>
+          {stats.intakeConfirmedConflicts > 0 ? (
+            <Link href="/intake" className="rounded-xl border border-red-300 bg-red-50 px-5 py-4 hover:bg-red-100">
+              <p className="text-sm font-semibold text-red-700">⚠️ تعارض مصالح مؤكد يحتاج مراجعتك</p>
+              <p className="mt-1 font-amiri text-2xl font-bold text-red-700">
+                {toEnglishDigits(stats.intakeConfirmedConflicts)}
+              </p>
+            </Link>
+          ) : (
+            <div className="rounded-xl border border-black/5 bg-white px-5 py-4">
+              <p className="text-sm text-foreground/50">طلبات استقبلتها هذا الشهر</p>
+              <p className="mt-1 font-amiri text-2xl font-bold text-navy">
+                {toEnglishDigits(stats.myIntakesThisMonth)}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {stats.qiwaAlerts.length > 0 && (
         <div className="rounded-xl border border-taradhi/20 bg-[#E8F0F8] p-5">
           <h2 className="mb-3 flex items-center gap-2 font-semibold text-taradhi">

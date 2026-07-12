@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { UserRole } from "@prisma/client";
 import { canManageInvoices, canManageUsers, canViewAuditLog, isManagement } from "@/lib/rbac";
+import { canViewRejectedBank } from "@/lib/intake";
 import type { NavItem } from "@/types";
 
 type NavGroup = {
@@ -12,10 +13,19 @@ type NavGroup = {
 };
 
 function buildNavGroups(role: UserRole): NavGroup[] {
+  const intakeItems: NavItem[] = [{ href: "/intake", label: "طلبات الاستلام", icon: "intake" }];
+  if (canViewRejectedBank(role)) {
+    intakeItems.push({ href: "/intake/rejected", label: "بنك الرفضات", icon: "audit" });
+  }
+
   const groups: NavGroup[] = [
     {
       label: "الرئيسية",
       items: [{ href: "/dashboard", label: "لوحة التحكم", icon: "dashboard" }],
+    },
+    {
+      label: "الاستلام",
+      items: intakeItems,
     },
     {
       label: "إدارة القضايا",
@@ -77,6 +87,14 @@ const ICONS: Record<NavItem["icon"], React.ReactNode> = {
     <path
       d="M3 7h18M3 7l1.5 12a1 1 0 001 1h13a1 1 0 001-1L21 7M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"
       strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  intake: (
+    <path
+      d="M4 4h11l5 5v11a1 1 0 01-1 1H5a1 1 0 01-1-1V4zM15 4v5h5M12 12v5m-2.5-2.5h5"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
     />

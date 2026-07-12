@@ -34,6 +34,7 @@ export type NavItem = {
   label: string;
   icon:
     | "dashboard"
+    | "intake"
     | "cases"
     | "clients"
     | "calendar"

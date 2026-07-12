@@ -40,6 +40,11 @@ model User {
   authoredMemos       LegalMemo[]          @relation("MemoAuthor")
   approvedMemos       LegalMemo[]          @relation("MemoApprover")
   memoReviews         MemoReview[]         @relation("MemoReviewer")
+  receivedIntakes     IntakeRequest[]      @relation("IntakeReceiver")
+  assessedIntakes     IntakeRequest[]      @relation("IntakeAssessor")
+  decidedIntakes      IntakeRequest[]      @relation("IntakeDecider")
+  intakeDocuments     IntakeDocument[]
+  intakeNotes         IntakeNote[]
 
   @@map("users")
 }
@@ -171,6 +176,7 @@ model Case {
   closureRequest         CaseClosureRequest?
   reopenLogs             CaseReopenLog[]
   memos                  LegalMemo[]
+  intakeRequest          IntakeRequest?
 
   @@map("cases")
 }
@@ -544,4 +550,132 @@ model MemoReview {
   reviewedAt   DateTime  @default(now())
 
   @@map("memo_reviews")
+}
+
+enum IntakeStatus {
+  received // تم الاستقبال
+  conflict_check // فحص تعارض المصالح
+  under_assessment // قيد التقييم
+  fee_agreement_pending // بانتظار توقيع عقد الأتعاب
+  accepted // مقبولة → تحولت لقضية
+  rejected // مرفوضة
+  cancelled // العميل انسحب
+}
+
+enum IntakeSource {
+  referral_client // إحالة من عميل
+  referral_lawyer // إحالة من محامٍ آخر
+  website // الموقع الإلكتروني
+  advertisement // إعلان
+  personal_network // علاقات شخصية
+  walk_in // حضور مباشر
+  other
+}
+
+enum ConflictCheckResult {
+  pending // لم يُفحص بعد
+  clear // لا يوجد تعارض
+  potential // تعارض محتمل
+  confirmed // تعارض مؤكد
+}
+
+enum RejectionReason {
+  conflict_of_interest // تعارض مصالح
+  outside_expertise // خارج التخصص
+  weak_legal_position // ضعف الموقف القانوني
+  fee_disagreement // خلاف على الأتعاب
+  client_withdrew // انسحاب العميل
+  capacity // عدم توفر طاقة
+  other
+}
+
+model IntakeRequest {
+  id            String @id @default(uuid())
+  requestNumber String @unique // ترقيم: INT-2026-0001
+
+  // بيانات العميل الأولية (قد لا يكون عميلاً بعد)
+  clientName     String
+  clientPhone    String
+  clientEmail    String?
+  clientIdNumber String? // هوية/سجل
+
+  // بيانات النزاع الأولية
+  disputeSummary String    @db.Text // وصف موجز للنزاع
+  opposingParty  String? // الطرف المقابل (لفحص التعارض)
+  proposedType   CaseType? // نوع القضية المقترح
+
+  // مصدر القضية
+  source     IntakeSource
+  referredBy String? // من أحال العميل
+
+  // المستلم والحالة
+  receivedBy   User         @relation("IntakeReceiver", fields: [receivedById], references: [id])
+  receivedById String
+  receivedAt   DateTime     @default(now())
+  status       IntakeStatus @default(received)
+
+  // فحص تعارض المصالح
+  conflictResult    ConflictCheckResult @default(pending)
+  conflictNotes     String?             @db.Text
+  conflictCheckedAt DateTime?
+
+  // دراسة التقييم (من مسؤول النظام)
+  assessmentBy      User?     @relation("IntakeAssessor", fields: [assessmentById], references: [id])
+  assessmentById    String?
+  legalBasis        String?   @db.Text // التكييف القانوني
+  strengths         String?   @db.Text // نقاط القوة
+  weaknesses        String?   @db.Text // نقاط الضعف
+  jurisdiction      String? // الاختصاص القضائي
+  estimatedDuration String? // المدة التقريبية
+  proposedFee       Decimal?  @db.Decimal(12, 2) // الأتعاب المقترحة
+  assessedAt        DateTime?
+
+  // قرار القبول/الرفض
+  decision        String? // "accepted" | "rejected"
+  decisionBy      User?            @relation("IntakeDecider", fields: [decisionById], references: [id])
+  decisionById    String?
+  decisionAt      DateTime?
+  rejectionReason RejectionReason?
+  rejectionNotes  String?          @db.Text
+
+  // عقد الأتعاب
+  feeAgreementSignedAt   DateTime?
+  feeAgreementDocId      String?
+  advancePaymentReceived Boolean   @default(false)
+
+  // ربط بالقضية عند القبول
+  case   Case?   @relation(fields: [caseId], references: [id])
+  caseId String? @unique // القضية المُنشأة
+
+  documents IntakeDocument[]
+  notes     IntakeNote[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@map("intake_requests")
+}
+
+model IntakeDocument {
+  id           String        @id @default(uuid())
+  intake       IntakeRequest @relation(fields: [intakeId], references: [id])
+  intakeId     String
+  title        String
+  storagePath  String
+  uploadedBy   User          @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+  createdAt    DateTime      @default(now())
+
+  @@map("intake_documents")
+}
+
+model IntakeNote {
+  id        String        @id @default(uuid())
+  intake    IntakeRequest @relation(fields: [intakeId], references: [id])
+  intakeId  String
+  content   String        @db.Text
+  author    User          @relation(fields: [authorId], references: [id])
+  authorId  String
+  createdAt DateTime      @default(now())
+
+  @@map("intake_notes")
 }

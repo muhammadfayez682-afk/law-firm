@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import type { CaseType, PartyRole } from "@prisma/client";
+import type { CaseType, PartyRole, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
@@ -502,6 +502,124 @@ async function main() {
     }
   }
 
+  // طلبات استلام تجريبية: 2 مقبولة (مربوطة بقضايا)، 1 قيد تقييم، 1 بانتظار عقد، 1 مرفوضة.
+  const intakeSeed: Prisma.IntakeRequestCreateInput[] = [
+    {
+      requestNumber: "INT-2026-0001",
+      clientName: "شركة الأفق للمقاولات",
+      clientPhone: "0114455667",
+      disputeSummary: "نزاع تجاري حول إخلال بعقد مقاولة وتأخر تسليم مشروع كبير مع مطالبة بالتعويض.",
+      opposingParty: "مؤسسة البناء الحديث",
+      proposedType: "commercial",
+      source: "referral_client",
+      receivedBy: { connect: { id: anas.id } },
+      status: "accepted",
+      conflictResult: "clear",
+      conflictNotes: "لا يوجد تعارض مصالح",
+      conflictCheckedAt: new Date("2026-05-01T09:00:00.000Z"),
+      assessmentBy: { connect: { id: anas.id } },
+      legalBasis: "نظام المعاملات المدنية — عقود المقاولة",
+      proposedFee: 60000,
+      assessedAt: new Date("2026-05-03T09:00:00.000Z"),
+      decision: "accepted",
+      decisionBy: { connect: { id: anas.id } },
+      decisionAt: new Date("2026-05-04T09:00:00.000Z"),
+      feeAgreementSignedAt: new Date("2026-05-05T09:00:00.000Z"),
+      advancePaymentReceived: true,
+      case: { connect: { id: commercialCase.id } },
+    },
+    {
+      requestNumber: "INT-2026-0002",
+      clientName: "عبدالله بن سعيد الحربي",
+      clientPhone: "0561112233",
+      disputeSummary: "مطالبة عمالية بمستحقات نهاية الخدمة والإجازات المتراكمة بعد إنهاء غير مشروع.",
+      opposingParty: "مؤسسة النخبة للتجارة العامة",
+      proposedType: "labor",
+      source: "walk_in",
+      receivedBy: { connect: { id: abdulrahman.id } },
+      status: "accepted",
+      conflictResult: "clear",
+      conflictNotes: "لا يوجد تعارض مصالح",
+      conflictCheckedAt: new Date("2026-05-10T09:00:00.000Z"),
+      assessmentBy: { connect: { id: anas.id } },
+      proposedFee: 15000,
+      assessedAt: new Date("2026-05-11T09:00:00.000Z"),
+      decision: "accepted",
+      decisionBy: { connect: { id: anas.id } },
+      decisionAt: new Date("2026-05-12T09:00:00.000Z"),
+      feeAgreementSignedAt: new Date("2026-05-13T09:00:00.000Z"),
+      advancePaymentReceived: true,
+      case: { connect: { id: laborCase.id } },
+    },
+    {
+      requestNumber: "INT-2026-0003",
+      clientName: "مؤسسة الريادة الطبية",
+      clientPhone: "0509988776",
+      clientEmail: "info@riada-medical.example.com",
+      disputeSummary: "نزاع حول توريد أجهزة طبية معيبة والمطالبة بفسخ العقد واسترداد المبالغ المدفوعة.",
+      opposingParty: "شركة التقنية للتجهيزات",
+      proposedType: "commercial",
+      source: "website",
+      receivedBy: { connect: { id: lamia.id } },
+      status: "under_assessment",
+      conflictResult: "clear",
+      conflictNotes: "لا يوجد تعارض مصالح",
+      conflictCheckedAt: new Date("2026-06-20T09:00:00.000Z"),
+      assessmentBy: { connect: { id: anas.id } },
+      legalBasis: "أحكام ضمان العيوب الخفية",
+      assessedAt: new Date("2026-06-21T09:00:00.000Z"),
+    },
+    {
+      requestNumber: "INT-2026-0004",
+      clientName: "سعد بن ناصر القحطاني",
+      clientPhone: "0533221100",
+      clientIdNumber: "1055667788",
+      disputeSummary: "دعوى مطالبة مالية بقيمة دين مستحق موثّق بسند لأمر لم يُسدَّد في موعده.",
+      opposingParty: "فيصل بن سعود الدوسري",
+      proposedType: "debt_collection",
+      source: "personal_network",
+      receivedBy: { connect: { id: sahar.id } },
+      status: "fee_agreement_pending",
+      conflictResult: "clear",
+      conflictNotes: "لا يوجد تعارض مصالح",
+      conflictCheckedAt: new Date("2026-07-01T09:00:00.000Z"),
+      assessmentBy: { connect: { id: anas.id } },
+      proposedFee: 8000,
+      assessedAt: new Date("2026-07-02T09:00:00.000Z"),
+      decision: "accepted",
+      decisionBy: { connect: { id: anas.id } },
+      decisionAt: new Date("2026-07-03T09:00:00.000Z"),
+    },
+    {
+      requestNumber: "INT-2026-0005",
+      clientName: "خالد بن عبدالعزيز",
+      clientPhone: "0577665544",
+      disputeSummary: "طلب تمثيل في نزاع تجاري ضد أحد عملاء المكتب الحاليين مما يثير تعارض مصالح.",
+      opposingParty: "شركة الأفق للمقاولات",
+      proposedType: "commercial",
+      source: "advertisement",
+      receivedBy: { connect: { id: omar.id } },
+      status: "rejected",
+      conflictResult: "confirmed",
+      conflictNotes: "الطرف المقابل عميل حالي للمكتب",
+      conflictCheckedAt: new Date("2026-07-08T09:00:00.000Z"),
+      decision: "rejected",
+      decisionBy: { connect: { id: anas.id } },
+      decisionAt: new Date("2026-07-09T09:00:00.000Z"),
+      rejectionReason: "conflict_of_interest",
+      rejectionNotes: "يتعارض مع تمثيلنا لشركة الأفق للمقاولات في قضية نشطة.",
+    },
+  ];
+
+  for (const it of intakeSeed) {
+    const existing = await prisma.intakeRequest.findUnique({
+      where: { requestNumber: it.requestNumber },
+    });
+    if (!existing) {
+      await prisma.intakeRequest.create({ data: it });
+    }
+  }
+
   console.log("تمت تعبئة البيانات التجريبية بنجاح:");
   console.log({
     users: userSeed.map((u) => `${u.email} (${u.role})`),
@@ -515,6 +633,7 @@ async function main() {
     templates: templatesSeed.map((t) => t.name),
     caseFlowStages: caseFlowSeed.reduce((sum, g) => sum + g.stages.length, 0),
     memos: memoSeed.length,
+    intakeRequests: intakeSeed.length,
   });
 }
 

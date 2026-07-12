@@ -53,6 +53,7 @@ export async function getAlertsCount(user: SessionUser): Promise<number> {
 export async function getDashboardStats(user: SessionUser) {
   const now = new Date();
   const weekEnd = getWeekEnd(now);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const caseWhere = caseVisibilityWhere(user);
 
   const [
@@ -65,6 +66,10 @@ export async function getDashboardStats(user: SessionUser) {
     myChangesRequestedMemos,
     myApprovedMemos,
     memosAwaitingReview,
+    intakeAwaitingAssessment,
+    intakeAwaitingDecision,
+    intakeConfirmedConflicts,
+    myIntakesThisMonth,
     recentCasesRaw,
     upcomingSessionsRaw,
     qiwaCasesForAlerts,
@@ -90,6 +95,14 @@ export async function getDashboardStats(user: SessionUser) {
       where: { authoredById: user.id, status: { in: ["approved", "submitted_to_court"] } },
     }),
     prisma.legalMemo.count({ where: { status: "submitted", case: caseWhere } }),
+    prisma.intakeRequest.count({ where: { status: { in: ["received", "conflict_check"] } } }),
+    prisma.intakeRequest.count({ where: { status: "under_assessment" } }),
+    prisma.intakeRequest.count({
+      where: { conflictResult: "confirmed", status: { notIn: ["accepted", "rejected"] } },
+    }),
+    prisma.intakeRequest.count({
+      where: { receivedById: user.id, receivedAt: { gte: monthStart } },
+    }),
     prisma.case.findMany({
       where: caseWhere,
       orderBy: { createdAt: "desc" },
@@ -152,6 +165,10 @@ export async function getDashboardStats(user: SessionUser) {
     myChangesRequestedMemos,
     myApprovedMemos,
     memosAwaitingReview,
+    intakeAwaitingAssessment,
+    intakeAwaitingDecision,
+    intakeConfirmedConflicts,
+    myIntakesThisMonth,
     recentCases,
     upcomingSessions,
     qiwaAlerts,
