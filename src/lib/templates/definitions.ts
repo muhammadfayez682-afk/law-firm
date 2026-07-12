@@ -10,7 +10,10 @@ export type AutofillKey =
   | "weekday"
   | "courtName"
   | "courtCaseNumber"
-  | "caseTypeLabel";
+  | "caseTypeLabel"
+  | "plaintiffName"
+  | "defendantName"
+  | "clientPartyRole";
 
 export type SimpleFieldType = "text" | "textarea" | "date" | "select";
 
@@ -129,7 +132,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
         options: ["خدمة قانونية", "قضية ابتدائية", "قضية استئناف"],
       },
       { kind: "field", key: "clientName", label: "اسم الموكل", type: "text", autofill: "clientName", half: true },
-      { kind: "field", key: "roleInSubject", label: "صفة في الموضوع", type: "text", half: true },
+      { kind: "field", key: "roleInSubject", label: "صفة في الموضوع", type: "text", autofill: "clientPartyRole", half: true },
       { kind: "field", key: "nationalId", label: "رقم الهوية", type: "text", autofill: "clientNationalId", half: true },
       { kind: "field", key: "agencyNumber", label: "رقم الوكالة", type: "text", autofill: "agencyNumber", half: true },
       { kind: "field", key: "phone", label: "رقم الجوال", type: "text", autofill: "clientPhone" },
@@ -177,8 +180,8 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
       { kind: "field", key: "judgeName", label: "فضيلة القاضي", type: "text" },
       { kind: "field", key: "caseNumber", label: "رقم الدعوى", type: "text", autofill: "courtCaseNumber", half: true },
       { kind: "field", key: "caseClassification", label: "تصنيف القضية", type: "text", autofill: "caseTypeLabel", half: true },
-      { kind: "field", key: "plaintiff", label: "المدعي", type: "text" },
-      { kind: "field", key: "defendant", label: "المدعى عليه", type: "text" },
+      { kind: "field", key: "plaintiff", label: "المدعي", type: "text", autofill: "plaintiffName" },
+      { kind: "field", key: "defendant", label: "المدعى عليه", type: "text", autofill: "defendantName" },
       { kind: "field", key: "sessionSummary", label: "ملخص الجلسة من قبل المحامي حاضر الجلسة", type: "textarea" },
       { kind: "field", key: "sessionNotes", label: "الملاحظات على ضبط الجلسة", type: "textarea" },
       { kind: "field", key: "proposedDirection", label: "توجه مقترح (أفكار مبدئية)", type: "textarea" },

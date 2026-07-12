@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase, caseVisibilityWhere } from "@/lib/rbac";
 import { getTemplateDefinition, type AutofillKey } from "@/lib/templates/definitions";
 import { formatDualDate, formatDualDateTime, getDayNameAr } from "@/lib/dateUtils";
+import { PARTY_ROLE_LABELS_AR } from "@/lib/parties";
 import { TemplateFillForm } from "./TemplateFillForm";
 
 const CASE_TYPE_LABELS_AR: Record<string, string> = {
@@ -89,6 +90,16 @@ export default async function TemplateFillPage({
     autofillValues.courtName = selectedCase.courtName ?? "";
     autofillValues.courtCaseNumber = selectedCase.courtCaseNumber ?? "";
     autofillValues.caseTypeLabel = CASE_TYPE_LABELS_AR[selectedCase.caseType] ?? selectedCase.caseType;
+
+    // أطراف الدعوى: المدعي/المدعى عليه وصفة موكّلنا.
+    const PLAINTIFF_ROLES = ["plaintiff", "appellant", "petitioner"];
+    const plaintiffParty = selectedCase.parties.find((p) => PLAINTIFF_ROLES.includes(p.role));
+    const defendantParty = selectedCase.parties.find((p) => !PLAINTIFF_ROLES.includes(p.role));
+    autofillValues.plaintiffName = plaintiffParty?.name ?? "";
+    autofillValues.defendantName = defendantParty?.name ?? "";
+    autofillValues.clientPartyRole = selectedCase.clientPartyRole
+      ? PARTY_ROLE_LABELS_AR[selectedCase.clientPartyRole]
+      : "";
   }
 
   return (
@@ -121,6 +132,7 @@ function loadCase(id: string) {
       client: { include: { agencies: true } },
       team: true,
       accessOverrides: true,
+      parties: true,
     },
   });
 }

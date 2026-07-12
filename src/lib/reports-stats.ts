@@ -107,6 +107,30 @@ export async function getReportsStats() {
     })
   );
 
+  // توزيع القضايا حسب صفة موكّلنا + معدل الكسب كمدّعين مقابل مدّعى عليهم.
+  const PLAINTIFF_SIDE = ["plaintiff", "appellant", "petitioner"] as const;
+  const DEFENDANT_SIDE = ["defendant", "appellee", "respondent"] as const;
+
+  async function sideStats(roles: readonly string[]) {
+    const [total, closed, closedWon] = await Promise.all([
+      prisma.case.count({ where: { clientPartyRole: { in: roles as never } } }),
+      prisma.case.count({ where: { clientPartyRole: { in: roles as never }, status: "closed" } }),
+      prisma.case.count({
+        where: {
+          clientPartyRole: { in: roles as never },
+          status: "closed",
+          outcome: { in: ["won_full", "won_partial"] },
+        },
+      }),
+    ]);
+    return { total, winRate: closed > 0 ? Math.round((closedWon / closed) * 100) : null };
+  }
+
+  const [plaintiffSide, defendantSide] = await Promise.all([
+    sideStats(PLAINTIFF_SIDE),
+    sideStats(DEFENDANT_SIDE),
+  ]);
+
   return {
     closedThisMonth,
     closedCasesCount,
@@ -118,6 +142,7 @@ export async function getReportsStats() {
     dueInvoicesCount: dueInvoices._count,
     caseTypeDistribution,
     lawyerPerformance,
+    partyRoleStats: { plaintiffSide, defendantSide },
   };
 }
 

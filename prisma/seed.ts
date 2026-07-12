@@ -1,5 +1,5 @@
 import { PrismaClient } from "@prisma/client";
-import type { CaseType } from "@prisma/client";
+import type { CaseType, PartyRole } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
@@ -237,6 +237,91 @@ async function main() {
       },
     },
   });
+
+  // أطراف الدعوى + صفة موكّلنا — تُعاد بناؤها بشكل idempotent (حذف ثم إنشاء)
+  // ليعمل reseed دون reset، مع تنويع: بعضها نحن مدّعون وبعضها مدّعى عليهم.
+  type SeedParty = {
+    role: PartyRole;
+    name: string;
+    identityNumber?: string | null;
+    opposingCounsel?: string | null;
+  };
+  const partySeed: {
+    caseId: string;
+    clientRole: PartyRole;
+    ourName: string;
+    ourClientId: string;
+    opposing: SeedParty[];
+  }[] = [
+    {
+      caseId: commercialCase.id,
+      clientRole: "plaintiff",
+      ourName: companyClientOne.fullName,
+      ourClientId: companyClientOne.id,
+      opposing: [
+        { role: "defendant", name: "مؤسسة البناء الحديث", opposingCounsel: "المحامي فهد الدوسري" },
+      ],
+    },
+    {
+      caseId: laborCase.id,
+      clientRole: "plaintiff",
+      ourName: individualClient.fullName,
+      ourClientId: individualClient.id,
+      opposing: [
+        { role: "defendant", name: "مؤسسة النخبة للتجارة العامة", identityNumber: "7004445556" },
+      ],
+    },
+    {
+      caseId: personalStatusCase.id,
+      clientRole: "plaintiff",
+      ourName: individualClient.fullName,
+      ourClientId: individualClient.id,
+      opposing: [{ role: "defendant", name: "المدعى عليها (الزوجة)" }],
+    },
+    {
+      // للتنويع: هنا موكّلنا مدّعى عليه.
+      caseId: commercialTaradhiCase.id,
+      clientRole: "defendant",
+      ourName: companyClientTwo.fullName,
+      ourClientId: companyClientTwo.id,
+      opposing: [
+        {
+          role: "plaintiff",
+          name: "الشريك السابق - محمد العنزي",
+          opposingCounsel: "المحامية سارة القحطاني",
+        },
+      ],
+    },
+  ];
+
+  for (const p of partySeed) {
+    await prisma.caseParty.deleteMany({ where: { caseId: p.caseId } });
+    await prisma.case.update({
+      where: { id: p.caseId },
+      data: { clientPartyRole: p.clientRole },
+    });
+    await prisma.caseParty.create({
+      data: {
+        caseId: p.caseId,
+        role: p.clientRole,
+        name: p.ourName,
+        isOurClient: true,
+        linkedClientId: p.ourClientId,
+      },
+    });
+    for (const o of p.opposing) {
+      await prisma.caseParty.create({
+        data: {
+          caseId: p.caseId,
+          role: o.role,
+          name: o.name,
+          identityNumber: o.identityNumber ?? null,
+          opposingCounsel: o.opposingCounsel ?? null,
+          isOurClient: false,
+        },
+      });
+    }
+  }
 
   const templatesSeed = [
     {

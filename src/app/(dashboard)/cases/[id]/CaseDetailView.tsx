@@ -28,6 +28,8 @@ import { CaseClosureModal } from "@/components/modals/CaseClosureModal";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
 import { MEMO_STATUS_LABELS_AR, MEMO_STATUS_STYLES } from "@/lib/memos";
+import { PARTY_ROLE_LABELS_AR } from "@/lib/parties";
+import { toEnglishDigits } from "@/lib/formatNumber";
 import type { MemoStatus } from "@prisma/client";
 
 type CaseMemo = {
@@ -63,12 +65,6 @@ const CASE_TYPE_LABELS_AR: Record<Case["caseType"], string> = {
   arbitration: "تحكيم",
   debt_collection: "تحصيل ديون",
   other: "أخرى",
-};
-
-const PARTY_ROLE_LABELS_AR: Record<CaseParty["role"], string> = {
-  plaintiff: "مدعٍ",
-  defendant: "مدعى عليه",
-  third_party: "طرف ثالث",
 };
 
 const TEAM_ROLE_LABELS_AR: Record<CaseTeamMember["roleInCase"], string> = {
@@ -154,6 +150,12 @@ export function CaseDetailView({
   const now = new Date();
   const nextSession = caseData.sessions.find((s) => new Date(s.sessionDate) >= now) ?? null;
 
+  // أطراف الدعوى: موكّلنا + الطرف المقابل الرئيسي + أطراف إضافية.
+  const ourParty = caseData.parties.find((p) => p.isOurClient) ?? null;
+  const opposingParties = caseData.parties.filter((p) => !p.isOurClient);
+  const primaryOpposing = opposingParties[0] ?? null;
+  const additionalParties = opposingParties.slice(1);
+
   const kpis = [
     { label: "النوع", value: CASE_TYPE_LABELS_AR[caseData.caseType] },
     { label: "المحكمة", value: caseData.courtName ?? "—" },
@@ -173,6 +175,22 @@ export function CaseDetailView({
         <div>
           <p className="text-xs text-foreground/50">{caseData.internalNumber}</p>
           <h1 className="font-amiri text-2xl font-bold text-navy">{caseData.title}</h1>
+          {ourParty && (
+            <p className="mt-1 text-sm">
+              <span className="font-semibold text-[#3F7A5C]">
+                {ourParty.name} ({PARTY_ROLE_LABELS_AR[ourParty.role]})
+              </span>
+              {primaryOpposing && (
+                <>
+                  {" "}
+                  <span className="text-foreground/40">ضد</span>{" "}
+                  <span className="text-foreground/70">
+                    {primaryOpposing.name} ({PARTY_ROLE_LABELS_AR[primaryOpposing.role]})
+                  </span>
+                </>
+              )}
+            </p>
+          )}
           <div className="mt-2 flex items-center gap-2">
             <CaseStatusBadge status={caseData.status} />
             <span className="text-xs text-foreground/50">
@@ -236,6 +254,92 @@ export function CaseDetailView({
           </div>
         ))}
       </div>
+
+      {/* بطاقة أطراف الدعوى البارزة */}
+      <section>
+        <h2 className="mb-3 font-semibold text-navy">أطراف الدعوى</h2>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* موكّلنا */}
+          <div
+            className="rounded-xl border-2 p-5"
+            style={{ backgroundColor: "#E6F0EA", borderColor: "#3F7A5C" }}
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-white"
+                style={{ backgroundColor: "#3F7A5C" }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-3.5 w-3.5">
+                  <path d="M20 6L9 17l-5-5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                موكّلنا
+              </span>
+              {ourParty && (
+                <span className="text-xs font-medium" style={{ color: "#3F7A5C" }}>
+                  {PARTY_ROLE_LABELS_AR[ourParty.role]}
+                </span>
+              )}
+            </div>
+            {ourParty ? (
+              <>
+                <p className="font-amiri text-lg font-bold text-navy">{ourParty.name}</p>
+                {ourParty.identityNumber && (
+                  <p className="mt-1 text-sm text-foreground/60" dir="ltr">
+                    {toEnglishDigits(ourParty.identityNumber)}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-foreground/50">لم تُسجَّل صفة موكّلنا بعد</p>
+            )}
+          </div>
+
+          {/* الطرف المقابل */}
+          <div className="rounded-xl border border-black/10 bg-gray-50 p-5">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="inline-flex rounded-full bg-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700">
+                الطرف المقابل
+              </span>
+              {primaryOpposing && (
+                <span className="text-xs font-medium text-foreground/60">
+                  {PARTY_ROLE_LABELS_AR[primaryOpposing.role]}
+                </span>
+              )}
+            </div>
+            {primaryOpposing ? (
+              <>
+                <p className="font-amiri text-lg font-bold text-navy">{primaryOpposing.name}</p>
+                {primaryOpposing.identityNumber && (
+                  <p className="mt-1 text-sm text-foreground/60" dir="ltr">
+                    {toEnglishDigits(primaryOpposing.identityNumber)}
+                  </p>
+                )}
+                {primaryOpposing.opposingCounsel && (
+                  <p className="mt-1 text-sm text-foreground/60">
+                    محاميه: {primaryOpposing.opposingCounsel}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-foreground/50">لا يوجد طرف مقابل مسجّل</p>
+            )}
+          </div>
+        </div>
+
+        {additionalParties.length > 0 && (
+          <div className="mt-4 rounded-xl border border-black/5 bg-white p-4 shadow-sm">
+            <p className="mb-2 text-sm font-medium text-navy">أطراف إضافية</p>
+            <ul className="space-y-1.5 text-sm">
+              {additionalParties.map((p) => (
+                <li key={p.id} className="flex items-center justify-between">
+                  <span className="text-navy">{p.name}</span>
+                  <span className="text-xs text-foreground/50">{PARTY_ROLE_LABELS_AR[p.role]}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
 
       <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
         <h2 className="mb-3 font-semibold text-navy">نماذج القضية</h2>
@@ -407,23 +511,6 @@ export function CaseDetailView({
                 </table>
               </div>
             )}
-          </section>
-
-          <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-semibold text-navy">الأطراف</h2>
-            <ul className="space-y-2 text-sm">
-              {caseData.parties.map((party) => (
-                <li key={party.id} className="flex items-center justify-between">
-                  <span>{party.name}</span>
-                  <span className="text-xs text-foreground/50">
-                    {PARTY_ROLE_LABELS_AR[party.role]}
-                  </span>
-                </li>
-              ))}
-              {caseData.parties.length === 0 && (
-                <p className="text-sm text-foreground/50">لا يوجد أطراف مسجّلون</p>
-              )}
-            </ul>
           </section>
 
           {caseData.notes && (

@@ -91,6 +91,36 @@ export default async function ReportsPage() {
       )}
 
       <div className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 font-semibold text-navy">توزيع القضايا حسب صفتنا</h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-4">
+            <p className="text-sm text-foreground/60">قضايا نحن فيها مدّعون</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-navy">
+              {stats.partyRoleStats.plaintiffSide.total}
+            </p>
+            <p className="mt-1 text-xs text-blue-700">
+              معدل الكسب:{" "}
+              {stats.partyRoleStats.plaintiffSide.winRate !== null
+                ? `${stats.partyRoleStats.plaintiffSide.winRate}%`
+                : "—"}
+            </p>
+          </div>
+          <div className="rounded-lg border border-amber-100 bg-amber-50 p-4">
+            <p className="text-sm text-foreground/60">قضايا نحن فيها مدّعى عليهم</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-navy">
+              {stats.partyRoleStats.defendantSide.total}
+            </p>
+            <p className="mt-1 text-xs text-amber-700">
+              معدل الكسب:{" "}
+              {stats.partyRoleStats.defendantSide.winRate !== null
+                ? `${stats.partyRoleStats.defendantSide.winRate}%`
+                : "—"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
         <h2 className="mb-4 font-semibold text-navy">توزيع القضايا حسب النوع</h2>
         <div className="space-y-3">
           {stats.caseTypeDistribution.map((c) => (

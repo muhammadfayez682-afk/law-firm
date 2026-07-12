@@ -155,6 +155,7 @@ model Case {
   responsibleLawyerId    String
   priority               CasePriority            @default(normal)
   conflictCheckConfirmed Boolean                 @default(false)
+  clientPartyRole        PartyRole? // صفة موكّلنا في الدعوى (للاستعلام السريع)
   notes                  String?
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
@@ -175,19 +176,29 @@ model Case {
 }
 
 enum PartyRole {
-  plaintiff
-  defendant
-  third_party
+  plaintiff // مدعي
+  defendant // مدعى عليه
+  appellant // مستأنف
+  appellee // مستأنف ضده
+  petitioner // مقدم الطلب (إداري)
+  respondent // المدعى عليه (إداري/لجان)
+  third_party // طرف ثالث
 }
 
 model CaseParty {
-  id             String    @id @default(uuid())
-  case           Case      @relation(fields: [caseId], references: [id])
-  caseId         String
-  role           PartyRole
-  name           String
-  linkedClient   Client?   @relation(fields: [linkedClientId], references: [id])
-  linkedClientId String?
+  id              String    @id @default(uuid())
+  case            Case      @relation(fields: [caseId], references: [id])
+  caseId          String
+  role            PartyRole
+  name            String
+  identityNumber  String?
+  phone           String?
+  address         String?
+  isOurClient     Boolean   @default(false) // ⚠️ الأهم: هل هذا الطرف موكّلنا؟
+  opposingCounsel String? // محامي الطرف المقابل
+  linkedClient    Client?   @relation(fields: [linkedClientId], references: [id])
+  linkedClientId  String?
+  notes           String?
 
   @@map("case_parties")
 }

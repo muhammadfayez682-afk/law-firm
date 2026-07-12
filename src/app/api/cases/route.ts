@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { canCreateCase } from "@/lib/rbac";
 import { buildCasesWhere, CASES_PAGE_SIZE } from "@/lib/case-filters";
 import { computeDeadlineDate, getAmicableSettlementPlatform } from "@/lib/caseFlow";
-import type { CaseType } from "@prisma/client";
+import { OPPOSING_ROLE, PARTY_ROLE_LABELS_AR } from "@/lib/parties";
+import type { CaseType, PartyRole } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -95,6 +96,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "اسم العميل مطلوب" }, { status: 400 });
   }
 
+  const clientPartyRole = body.clientPartyRole as PartyRole | undefined;
+  if (!clientPartyRole || !(clientPartyRole in PARTY_ROLE_LABELS_AR)) {
+    return NextResponse.json({ error: "صفة موكّلنا في الدعوى مطلوبة" }, { status: 400 });
+  }
+
+  type OpposingPartyPayload = {
+    name?: string;
+    role?: PartyRole;
+    identityNumber?: string | null;
+    opposingCounsel?: string | null;
+  };
+  const opposingParties = (Array.isArray(body.opposingParties)
+    ? body.opposingParties
+    : []) as OpposingPartyPayload[];
+
   try {
     const created = await prisma.$transaction(async (tx) => {
       let clientId: string = body.clientId;
@@ -128,17 +144,42 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // نأخذ أكبر رقم تسلسلي مستخدم لهذه السنة ونزيده — يتحمّل الفجوات في الترقيم.
       const year = new Date().getFullYear();
-      const casesThisYear = await tx.case.count({
+      const lastCase = await tx.case.findFirst({
         where: { internalNumber: { startsWith: `MZN-${year}-` } },
+        orderBy: { internalNumber: "desc" },
+        select: { internalNumber: true },
       });
-      const internalNumber = `MZN-${year}-${String(casesThisYear + 1).padStart(4, "0")}`;
+      const lastSeq = lastCase ? parseInt(lastCase.internalNumber.split("-")[2] ?? "0", 10) : 0;
+      const internalNumber = `MZN-${year}-${String(lastSeq + 1).padStart(4, "0")}`;
 
       const caseType = body.caseType as CaseType;
       const platform = getAmicableSettlementPlatform(caseType);
       const firstStage = platform
         ? await tx.caseFlowStage.findFirst({ where: { caseType, order: 1, active: true } })
         : null;
+
+      // طرف موكّلنا (isOurClient) + الأطراف المقابلة.
+      const ourClient = await tx.client.findUnique({ where: { id: clientId } });
+      const ourPartyName = ourClient?.fullName ?? newClient?.fullName ?? "موكّلنا";
+      const partiesCreate = [
+        {
+          role: clientPartyRole,
+          name: ourPartyName,
+          isOurClient: true,
+          linkedClientId: clientId,
+        },
+        ...opposingParties
+          .filter((p) => p.name && p.name.trim())
+          .map((p) => ({
+            role: p.role ?? OPPOSING_ROLE[clientPartyRole],
+            name: p.name!.trim(),
+            identityNumber: p.identityNumber?.trim() || null,
+            opposingCounsel: p.opposingCounsel?.trim() || null,
+            isOurClient: false,
+          })),
+      ];
 
       return tx.case.create({
         data: {
@@ -151,7 +192,9 @@ export async function POST(request: NextRequest) {
           responsibleLawyerId: body.responsibleLawyerId,
           priority: body.priority ?? "normal",
           conflictCheckConfirmed: true,
+          clientPartyRole,
           notes: body.notes || null,
+          parties: { create: partiesCreate },
           team: {
             create: [{ userId: body.responsibleLawyerId, roleInCase: "lawyer" }],
           },

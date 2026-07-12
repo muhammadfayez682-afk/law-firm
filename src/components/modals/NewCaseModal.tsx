@@ -3,7 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { CaseFlowStage, CasePriority, CaseType, Client, User } from "@prisma/client";
+import type { CaseFlowStage, CasePriority, CaseType, Client, PartyRole, User } from "@prisma/client";
+import {
+  CLIENT_PARTY_ROLE_OPTIONS,
+  OPPOSING_ROLE,
+  PARTY_ROLE_LABELS_AR,
+} from "@/lib/parties";
 
 const CASE_TYPE_OPTIONS: { value: CaseType; label: string }[] = [
   { value: "general", label: "عام" },
@@ -49,6 +54,21 @@ export function NewCaseModal({
 
   const [allStages, setAllStages] = useState<CaseFlowStage[]>([]);
   const [selectedCaseType, setSelectedCaseType] = useState<string>("");
+
+  const [clientPartyRole, setClientPartyRole] = useState<PartyRole | "">("");
+  const [opposingParties, setOpposingParties] = useState<
+    { name: string; identityNumber: string; opposingCounsel: string }[]
+  >([{ name: "", identityNumber: "", opposingCounsel: "" }]);
+
+  const opposingRoleLabel = clientPartyRole
+    ? PARTY_ROLE_LABELS_AR[OPPOSING_ROLE[clientPartyRole]]
+    : "—";
+
+  function updateOpposing(index: number, field: string, value: string) {
+    setOpposingParties((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, [field]: value } : p))
+    );
+  }
 
   useEffect(() => {
     fetch("/api/case-flows")
@@ -98,6 +118,10 @@ export function NewCaseModal({
       if (!expiryDate) errors.expiryDate = "تاريخ الانتهاء مطلوب";
     }
 
+    if (!clientPartyRole) {
+      errors.clientPartyRole = "صفة موكّلنا في الدعوى مطلوبة";
+    }
+
     if (!conflictConfirmed) {
       errors.conflictCheckConfirmed = "إقرار التحقق من تعارض المصالح إلزامي";
     }
@@ -120,6 +144,15 @@ export function NewCaseModal({
       claimValue: formData.get("claimValue") || null,
       conflictCheckConfirmed: true,
       notes: formData.get("notes") || null,
+      clientPartyRole,
+      opposingParties: opposingParties
+        .filter((p) => p.name.trim())
+        .map((p) => ({
+          name: p.name.trim(),
+          role: clientPartyRole ? OPPOSING_ROLE[clientPartyRole] : undefined,
+          identityNumber: p.identityNumber.trim() || null,
+          opposingCounsel: p.opposingCounsel.trim() || null,
+        })),
       ...(clientMode === "existing"
         ? { clientId: existingClientId }
         : {
@@ -463,6 +496,92 @@ export function NewCaseModal({
                 <textarea name="notes" rows={3} className={inputClass} />
               </div>
             </div>
+          </section>
+
+          {/* القسم 4: أطراف الدعوى */}
+          <section>
+            <h3 className={sectionTitleClass}>4. أطراف الدعوى</h3>
+
+            <div className="mb-4 rounded-lg border-2 border-gold/40 bg-gold/5 p-4">
+              <label className={labelClass}>
+                صفة موكّلنا في الدعوى <span className="text-red-600">*</span>
+              </label>
+              <select
+                value={clientPartyRole}
+                onChange={(e) => setClientPartyRole(e.target.value as PartyRole)}
+                className={inputClass}
+              >
+                <option value="">اختر صفة موكّلنا</option>
+                {CLIENT_PARTY_ROLE_OPTIONS.map((role) => (
+                  <option key={role} value={role}>
+                    {PARTY_ROLE_LABELS_AR[role]}
+                  </option>
+                ))}
+              </select>
+              {fieldErrors.clientPartyRole && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.clientPartyRole}</p>
+              )}
+            </div>
+
+            <p className="mb-2 text-sm font-medium text-navy">
+              الطرف المقابل{clientPartyRole ? ` (الصفة: ${opposingRoleLabel})` : ""}
+            </p>
+            <div className="space-y-3">
+              {opposingParties.map((party, index) => (
+                <div key={index} className="rounded-lg border border-black/10 p-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className={labelClass}>الاسم</label>
+                      <input
+                        value={party.name}
+                        onChange={(e) => updateOpposing(index, "name", e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>رقم الهوية / السجل</label>
+                      <input
+                        value={party.identityNumber}
+                        onChange={(e) => updateOpposing(index, "identityNumber", e.target.value)}
+                        className={inputClass}
+                        dir="ltr"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>محامي الطرف المقابل</label>
+                      <input
+                        value={party.opposingCounsel}
+                        onChange={(e) => updateOpposing(index, "opposingCounsel", e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  {opposingParties.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setOpposingParties((prev) => prev.filter((_, i) => i !== index))
+                      }
+                      className="mt-2 text-xs font-medium text-red-600 hover:underline"
+                    >
+                      إزالة هذا الطرف
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setOpposingParties((prev) => [
+                  ...prev,
+                  { name: "", identityNumber: "", opposingCounsel: "" },
+                ])
+              }
+              className="mt-3 rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"
+            >
+              + إضافة طرف آخر
+            </button>
           </section>
 
           <div>
