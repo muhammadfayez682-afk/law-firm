@@ -190,6 +190,29 @@ src/
 - **سجل التدقيق جزئي**: يسجّل `create`/`update` فقط — لا `view` (فتح المستندات) ولا حذف فعلي (النظام يؤرشف). لا يوجد `DocumentAccessLog`.
 - **لا توجد صفحة مستندات مستقلة** (`/documents`) — المستندات ضمن صفحة القضية فقط.
 
+## الملاحظات التقنية المهمة
+
+### بعد أي تعديل على Prisma Schema
+
+⚠️ Next.js dev server لا يُعيد تحميل `@prisma/client` تلقائيًا عند إعادة توليده.
+
+بعد أي واحد من هذه الأوامر:
+- `npx prisma migrate dev`
+- `npx prisma generate`
+- `npx prisma db push`
+- `npx prisma migrate reset`
+
+يجب إعادة تشغيل dev server يدويًا:
+1. `Ctrl+C` في terminal الخاص بـ `npm run dev`
+2. `npm run dev`
+
+الأعراض إذا نسيت:
+- Runtime error: `"prisma.X.count is not a function"` (أو `Cannot read properties of undefined`)
+- الحقول الجديدة تظهر `undefined`
+- API routes ترجع 500 بدون سبب واضح
+
+`npm run build` يستخدم client محدّثًا دائمًا، فالخطأ يظهر فقط في dev.
+
 ## 7. لقطة حالة فعلية (فحص 2026-07-13)
 
 فُحص المشروع بالكامل (`prisma migrate status`, `npm run build`, بذر البيانات، وتحقق HTTP للدورات الكاملة). النتيجة:
