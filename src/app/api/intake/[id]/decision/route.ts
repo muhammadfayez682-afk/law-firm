@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   if (!canDecideIntake(session.user.role)) {
-    return NextResponse.json({ error: "قرار القبول/الرفض متاح لمسؤول النظام فقط" }, { status: 403 });
+    return NextResponse.json({ error: "قرار القبول/الرفض متاح لمسؤول النظام أو المشرف" }, { status: 403 });
   }
 
   const { id } = await params;

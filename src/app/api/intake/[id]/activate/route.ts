@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   if (!canActivateIntake(session.user.role)) {
-    return NextResponse.json({ error: "تفعيل القضية متاح لمسؤول النظام فقط" }, { status: 403 });
+    return NextResponse.json({ error: "تفعيل القضية متاح لمسؤول النظام أو المشرف" }, { status: 403 });
   }
 
   const { id } = await params;
@@ -146,7 +146,13 @@ export async function POST(request: NextRequest, { params }: Params) {
         });
       }
 
-      // 6. ربط الطلب بالقضية وإغلاق مساره.
+      // 6. نقل النماذج المعبّأة في مرحلة الاستلام إلى القضية.
+      await tx.filledTemplate.updateMany({
+        where: { intakeId: intake.id },
+        data: { caseId: newCase.id, intakeId: null },
+      });
+
+      // 7. ربط الطلب بالقضية وإغلاق مساره.
       await tx.intakeRequest.update({
         where: { id },
         data: {

@@ -11,6 +11,8 @@ import type {
   IntakeStatus,
   PartyRole,
   RejectionReason,
+  TaskStatus,
+  UserRole,
 } from "@prisma/client";
 import {
   CONFLICT_RESULT_LABELS_AR,
@@ -22,9 +24,11 @@ import {
   intakeStageIndex,
   REJECTION_REASON_LABELS_AR,
 } from "@/lib/intake";
+import { TASK_STATUS_LABELS_AR, TASK_STATUS_STYLES } from "@/lib/tasks";
 import { CLIENT_PARTY_ROLE_OPTIONS, PARTY_ROLE_LABELS_AR } from "@/lib/parties";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { formatCurrency, toEnglishDigits } from "@/lib/formatNumber";
+import { NewTaskModal } from "@/components/modals/NewTaskModal";
 
 type IntakeData = {
   id: string;
@@ -51,6 +55,11 @@ type IntakeData = {
   proposedFee: number | null;
   assessedAt: string | null;
   assessmentByName: string | null;
+  assessmentDelegatedToId: string | null;
+  assessmentDelegatedToName: string | null;
+  assessmentDelegatedByName: string | null;
+  assessmentDelegatedById: string | null;
+  assessmentDelegatedAt: string | null;
   decision: string | null;
   decisionByName: string | null;
   rejectionReason: RejectionReason | null;
@@ -61,6 +70,22 @@ type IntakeData = {
   caseInternalNumber: string | null;
   documents: { id: string; title: string; storagePath: string; uploadedByName: string }[];
   notes: { id: string; content: string; authorName: string; createdAt: string }[];
+  filledTemplates: {
+    id: string;
+    templateKey: string;
+    templateName: string;
+    pdfPath: string | null;
+    filledByName: string;
+    createdAt: string;
+  }[];
+  tasks: {
+    id: string;
+    taskNumber: string;
+    title: string;
+    status: TaskStatus;
+    assignedToName: string;
+    dueDate: string | null;
+  }[];
 };
 
 const CASE_TYPE_LABELS_AR: Record<string, string> = {
@@ -76,19 +101,34 @@ export function IntakeDetailView({
   intake,
   lawyers,
   canAssess,
+  canDecide,
   canActivate,
+  canDelegate,
+  currentUserId,
+  delegateUsers,
+  taskUsers,
+  intakeTemplates,
 }: {
   intake: IntakeData;
   lawyers: { id: string; fullName: string }[];
   canAssess: boolean;
+  canDecide: boolean;
   canActivate: boolean;
+  canDelegate: boolean;
+  currentUserId: string;
+  delegateUsers: { id: string; fullName: string; role: UserRole }[];
+  taskUsers: { id: string; fullName: string; role: UserRole }[];
+  intakeTemplates: { key: string; name: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [showActivate, setShowActivate] = useState(false);
+  const [showDelegate, setShowDelegate] = useState(false);
+  const [showNewTask, setShowNewTask] = useState(false);
   const activeStage = intakeStageIndex(intake.status);
   const isDecided = intake.status === "accepted" || intake.status === "rejected";
+  const isDelegated = Boolean(intake.assessmentDelegatedToId);
 
   async function post(url: string, body?: unknown, okMsg?: string) {
     setBusy(true);
@@ -98,6 +138,23 @@ export function IntakeDetailView({
         headers: { "Content-Type": "application/json" },
         body: body ? JSON.stringify(body) : undefined,
       });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(data?.error ?? "تعذّر تنفيذ العملية.");
+        return null;
+      }
+      if (okMsg) toast.success(okMsg);
+      router.refresh();
+      return data;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function del(url: string, okMsg?: string) {
+    setBusy(true);
+    try {
+      const res = await fetch(url, { method: "DELETE" });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
         toast.error(data?.error ?? "تعذّر تنفيذ العملية.");
@@ -201,9 +258,62 @@ export function IntakeDetailView({
         )}
       </section>
 
-      {/* قسم 3: دراسة التقييم — مسؤول النظام فقط */}
+      {/* التفويض: بانر أو زر تفويض التقييم */}
+      {!isDecided && (isDelegated || canDelegate) && (
+        <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+          {isDelegated ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-navy">
+                  التقييم مُفوَّض إلى{" "}
+                  <span className="font-semibold text-taradhi">{intake.assessmentDelegatedToName}</span>
+                  {intake.assessmentDelegatedByName ? ` من ${intake.assessmentDelegatedByName}` : ""}
+                </p>
+                {intake.assessmentDelegatedAt && (
+                  <p className="mt-0.5 text-xs text-foreground/50" dir="ltr">
+                    {formatDualDateTime(intake.assessmentDelegatedAt)}
+                  </p>
+                )}
+              </div>
+              {(canDelegate || intake.assessmentDelegatedById === currentUserId) && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => del(`/api/intake/${intake.id}/delegate-assessment`, "أُلغي التفويض")}
+                  className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
+                >
+                  إلغاء التفويض
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-semibold text-navy">دراسة التقييم</h2>
+                <p className="mt-0.5 text-sm text-foreground/60">
+                  قيّم بنفسك أدناه، أو فوّض التقييم لموظف آخر ليعدّه ويعيده لك للقرار.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDelegate(true)}
+                className="rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"
+              >
+                تفويض التقييم
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* قسم 3: دراسة التقييم — الإدارة/المشرف أو المُفوَّض إليه */}
       {canAssess && !isDecided && (
-        <AssessmentForm intake={intake} busy={busy} onSave={(body) => post(`/api/intake/${intake.id}/assessment`, body, "تم حفظ التقييم")} />
+        <AssessmentForm
+          intake={intake}
+          busy={busy}
+          onCreateTask={() => setShowNewTask(true)}
+          onSave={(body) => post(`/api/intake/${intake.id}/assessment`, body, "تم حفظ التقييم")}
+        />
       )}
       {(!canAssess || isDecided) && intake.assessedAt && (
         <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
@@ -219,8 +329,8 @@ export function IntakeDetailView({
         </section>
       )}
 
-      {/* أزرار القرار — بعد حفظ التقييم، لمسؤول النظام */}
-      {canAssess && !isDecided && intake.status !== "fee_agreement_pending" && intake.assessedAt && (
+      {/* أزرار القرار — بعد حفظ التقييم، للإدارة/المشرف فقط */}
+      {canDecide && !isDecided && intake.status !== "fee_agreement_pending" && intake.assessedAt && (
         <div className="flex flex-wrap justify-end gap-3">
           <button type="button" disabled={busy} onClick={() => setShowReject(true)}
             className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
@@ -268,12 +378,79 @@ export function IntakeDetailView({
         </section>
       )}
 
+      {/* النماذج المطلوبة قبل الاعتماد */}
+      {!isDecided && intakeTemplates.length > 0 && (
+        <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+          <h2 className="mb-1 font-semibold text-navy">النماذج المطلوبة قبل الاعتماد</h2>
+          <p className="mb-3 text-xs text-foreground/50">
+            نماذج تُعبّأ في مرحلة الاستلام (تنتقل تلقائيًا للقضية عند التفعيل).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {intakeTemplates.map((t) => (
+              <Link
+                key={t.key}
+                href={`/templates/${t.key}/fill?intakeId=${intake.id}`}
+                className="rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"
+              >
+                {t.name}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {intake.filledTemplates.length > 0 && (
+        <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 font-semibold text-navy">النماذج المعبّأة</h2>
+          <ul className="divide-y divide-black/5 text-sm">
+            {intake.filledTemplates.map((f) => (
+              <li key={f.id} className="flex items-center justify-between gap-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-navy">{f.templateName}</p>
+                  <p className="text-xs text-foreground/40">
+                    {f.filledByName} · {formatDualDate(f.createdAt)}
+                  </p>
+                </div>
+                {f.pdfPath ? (
+                  <a href={f.pdfPath} target="_blank" rel="noopener noreferrer" className="shrink-0 text-taradhi hover:underline">
+                    عرض PDF
+                  </a>
+                ) : (
+                  <span className="shrink-0 text-xs text-foreground/40">مسودة</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* المهام المرتبطة بالطلب */}
+      <TasksSection
+        tasks={intake.tasks}
+        onNewTask={() => setShowNewTask(true)}
+      />
+
       {/* قسم 5: المستندات */}
       <DocumentsSection intake={intake} />
 
       {/* قسم 6: الملاحظات */}
       <NotesSection intake={intake} />
 
+      {showDelegate && (
+        <DelegateModal
+          intakeId={intake.id}
+          users={delegateUsers}
+          onClose={() => setShowDelegate(false)}
+        />
+      )}
+      {showNewTask && (
+        <NewTaskModal
+          users={taskUsers}
+          presetIntakeId={intake.id}
+          currentUserId={currentUserId}
+          onClose={() => setShowNewTask(false)}
+        />
+      )}
       {showReject && <RejectModal intakeId={intake.id} onClose={() => setShowReject(false)} />}
       {showActivate && (
         <ActivateModal
@@ -295,18 +472,136 @@ function Field({ label, value, dir }: { label: string; value: string; dir?: "ltr
   );
 }
 
+function TasksSection({
+  tasks,
+  onNewTask,
+}: {
+  tasks: IntakeData["tasks"];
+  onNewTask: () => void;
+}) {
+  return (
+    <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-semibold text-navy">المهام</h2>
+        <button
+          type="button"
+          onClick={onNewTask}
+          className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-light"
+        >
+          + مهمة جديدة
+        </button>
+      </div>
+      {tasks.length === 0 ? (
+        <p className="text-sm text-foreground/50">لا توجد مهام مرتبطة بهذا الطلب</p>
+      ) : (
+        <ul className="divide-y divide-black/5">
+          {tasks.map((t) => (
+            <li key={t.id} className="py-2.5">
+              <Link href={`/tasks/${t.id}`} className="flex items-center justify-between gap-3 text-sm hover:text-taradhi">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-navy">{t.title}</p>
+                  <p className="text-xs text-foreground/50">
+                    <span className="font-mono" dir="ltr">{t.taskNumber}</span> · {t.assignedToName}
+                    {t.dueDate ? ` · استحقاق ${formatDualDate(t.dueDate)}` : ""}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${TASK_STATUS_STYLES[t.status]}`}>
+                  {TASK_STATUS_LABELS_AR[t.status]}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function DelegateModal({
+  intakeId,
+  users,
+  onClose,
+}: {
+  intakeId: string;
+  users: { id: string; fullName: string; role: UserRole }[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/intake/${intakeId}/delegate-assessment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ delegateToId: fd.get("delegateToId"), note: fd.get("note") }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) {
+        toast.error(d?.error ?? "تعذّر التفويض.");
+        return;
+      }
+      toast.success("تم تفويض التقييم");
+      router.refresh();
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ModalShell title="تفويض التقييم" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className={labelClass}>الموظف المُفوَّض <span className="text-red-600">*</span></label>
+          <select name="delegateToId" required defaultValue="" className={inputClass}>
+            <option value="" disabled>اختر الموظف</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>{u.fullName}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelClass}>ملاحظة تفويض</label>
+          <textarea name="note" rows={3} className={inputClass} placeholder="اختياري" />
+        </div>
+        <div className="flex justify-end gap-3 border-t border-black/5 pt-4">
+          <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5">إلغاء</button>
+          <button type="submit" disabled={loading} className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60">
+            {loading ? "جارٍ..." : "تفويض"}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
 function AssessmentForm({
   intake,
   busy,
+  onCreateTask,
   onSave,
 }: {
   intake: IntakeData;
   busy: boolean;
+  onCreateTask: () => void;
   onSave: (body: unknown) => void;
 }) {
   return (
     <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
-      <h2 className="mb-3 font-semibold text-navy">دراسة التقييم <span className="text-xs text-foreground/50">(مسؤول النظام)</span></h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="font-semibold text-navy">دراسة التقييم</h2>
+        <button
+          type="button"
+          onClick={onCreateTask}
+          className="rounded-lg border border-navy/20 px-3 py-1.5 text-xs font-medium text-navy hover:bg-navy/5"
+        >
+          + إنشاء مهمة
+        </button>
+      </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();

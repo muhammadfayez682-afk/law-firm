@@ -620,6 +620,145 @@ async function main() {
     }
   }
 
+  // مهام تجريبية: 3 مربوطة بقضايا، 2 بطلبات استلام، 3 مستقلة، 2 متأخرة.
+  const intake3 = await prisma.intakeRequest.findUnique({ where: { requestNumber: "INT-2026-0003" } });
+  const intake4 = await prisma.intakeRequest.findUnique({ where: { requestNumber: "INT-2026-0004" } });
+
+  const taskSeed: Prisma.TaskCreateInput[] = [
+    // مربوطة بقضايا
+    {
+      taskNumber: "TSK-2026-0001",
+      title: "بحث قانوني حول التعويض عن تأخر التسليم",
+      description: "تجهيز مذكرة بحثية بالأنظمة والسوابق ذات الصلة بعقود المقاولة.",
+      category: "research",
+      priority: "high",
+      status: "in_progress",
+      startedAt: new Date("2026-07-08T09:00:00.000Z"),
+      dueDate: new Date("2026-07-20T00:00:00.000Z"),
+      assignedTo: { connect: { id: sultan.id } },
+      assignedBy: { connect: { id: lamia.id } },
+      case: { connect: { id: commercialCase.id } },
+    },
+    {
+      taskNumber: "TSK-2026-0002",
+      title: "إعداد مذكرة رد على لائحة المدعى عليه",
+      description: "صياغة المسودة الأولى للمذكرة تمهيدًا لمراجعة المحامي.",
+      category: "document_preparation",
+      priority: "normal",
+      status: "pending",
+      dueDate: new Date("2026-07-22T00:00:00.000Z"),
+      assignedTo: { connect: { id: yazid.id } },
+      assignedBy: { connect: { id: sahar.id } },
+      case: { connect: { id: laborCase.id } },
+    },
+    {
+      taskNumber: "TSK-2026-0003",
+      title: "حضور جلسة النفقة وتسجيل المحضر",
+      category: "meeting",
+      priority: "urgent",
+      status: "pending",
+      dueDate: new Date("2026-07-18T00:00:00.000Z"),
+      assignedTo: { connect: { id: lamia.id } },
+      assignedBy: { connect: { id: abdulrahman.id } },
+      case: { connect: { id: personalStatusCase.id } },
+    },
+    // مربوطة بطلبات استلام
+    ...(intake3
+      ? [
+          {
+            taskNumber: "TSK-2026-0004",
+            title: "إعداد دراسة تقييم لطلب الاستلام الطبي",
+            description: "دراسة الموقف القانوني وتقدير الأتعاب تمهيدًا لقرار الإدارة.",
+            category: "research" as const,
+            priority: "high" as const,
+            status: "pending" as const,
+            dueDate: new Date("2026-07-19T00:00:00.000Z"),
+            assignedTo: { connect: { id: sultan.id } },
+            assignedBy: { connect: { id: anas.id } },
+            intake: { connect: { id: intake3.id } },
+          },
+        ]
+      : []),
+    ...(intake4
+      ? [
+          {
+            taskNumber: "TSK-2026-0005",
+            title: "اجتماع أولي مع العميل لتوقيع عقد الأتعاب",
+            category: "meeting" as const,
+            priority: "normal" as const,
+            status: "pending" as const,
+            dueDate: new Date("2026-07-21T00:00:00.000Z"),
+            assignedTo: { connect: { id: sahar.id } },
+            assignedBy: { connect: { id: anas.id } },
+            intake: { connect: { id: intake4.id } },
+          },
+        ]
+      : []),
+    // مستقلة
+    {
+      taskNumber: "TSK-2026-0006",
+      title: "شراء مستلزمات مكتبية",
+      description: "قرطاسية وأحبار طابعة لقسم الدراسات.",
+      category: "administrative",
+      priority: "low",
+      status: "pending",
+      assignedTo: { connect: { id: yazid.id } },
+      assignedBy: { connect: { id: anas.id } },
+    },
+    {
+      taskNumber: "TSK-2026-0007",
+      title: "اجتماع فريق الدراسات الأسبوعي",
+      category: "meeting",
+      priority: "normal",
+      status: "pending",
+      dueDate: new Date("2026-07-16T00:00:00.000Z"),
+      assignedTo: { connect: { id: sultan.id } },
+      assignedBy: { connect: { id: abdulrahman.id } },
+    },
+    {
+      taskNumber: "TSK-2026-0008",
+      title: "متابعة تحديث بيانات عميل",
+      category: "follow_up",
+      priority: "normal",
+      status: "completed",
+      startedAt: new Date("2026-07-05T09:00:00.000Z"),
+      completedAt: new Date("2026-07-10T09:00:00.000Z"),
+      completionNote: "تم تحديث بيانات التواصل والوكالة.",
+      assignedTo: { connect: { id: omar.id } },
+      assignedBy: { connect: { id: anas.id } },
+    },
+    // متأخرة (استحقاق فائت ولم تُنجز)
+    {
+      taskNumber: "TSK-2026-0009",
+      title: "تجهيز ملخص السوابق القضائية",
+      category: "research",
+      priority: "high",
+      status: "pending",
+      dueDate: new Date("2026-07-01T00:00:00.000Z"),
+      assignedTo: { connect: { id: sultan.id } },
+      assignedBy: { connect: { id: lamia.id } },
+      case: { connect: { id: commercialCase.id } },
+    },
+    {
+      taskNumber: "TSK-2026-0010",
+      title: "متابعة سداد الدفعة المقدمة",
+      category: "follow_up",
+      priority: "urgent",
+      status: "in_progress",
+      startedAt: new Date("2026-06-15T09:00:00.000Z"),
+      dueDate: new Date("2026-06-20T00:00:00.000Z"),
+      assignedTo: { connect: { id: omar.id } },
+      assignedBy: { connect: { id: anas.id } },
+    },
+  ];
+
+  for (const t of taskSeed) {
+    const existing = await prisma.task.findUnique({ where: { taskNumber: t.taskNumber } });
+    if (!existing) {
+      await prisma.task.create({ data: t });
+    }
+  }
+
   console.log("تمت تعبئة البيانات التجريبية بنجاح:");
   console.log({
     users: userSeed.map((u) => `${u.email} (${u.role})`),
@@ -634,6 +773,7 @@ async function main() {
     caseFlowStages: caseFlowSeed.reduce((sum, g) => sum + g.stages.length, 0),
     memos: memoSeed.length,
     intakeRequests: intakeSeed.length,
+    tasks: taskSeed.length,
   });
 }
 

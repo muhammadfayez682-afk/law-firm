@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase, canEditCase, isSystemAdmin } from "@/lib/rbac";
 import { getAmicableSettlementPlatform, getCaseFlowStages, getFirstStage } from "@/lib/caseFlow";
 import { canAuthorMemo, canReviewMemo } from "@/lib/memos";
+import { displayTaskStatus, getAssignableUsers } from "@/lib/tasks";
 import { CaseDetailView } from "./CaseDetailView";
 
 export default async function CaseDetailPage({
@@ -34,15 +35,20 @@ export default async function CaseDetailPage({
         orderBy: { updatedAt: "desc" },
         include: { authoredBy: { select: { fullName: true } } },
       },
+      tasks: {
+        orderBy: { createdAt: "desc" },
+        include: { assignedTo: { select: { fullName: true } } },
+      },
     },
   });
 
   if (!caseData) notFound();
   if (!canAccessCase(session.user, caseData)) notFound();
 
-  const [flowStages, firstStage] = await Promise.all([
+  const [flowStages, firstStage, taskUsers] = await Promise.all([
     getCaseFlowStages(caseData.caseType),
     getFirstStage(caseData.caseType),
+    getAssignableUsers(prisma, { id: session.user.id, role: session.user.role }),
   ]);
   const settlementPlatform = getAmicableSettlementPlatform(caseData.caseType);
 
@@ -63,6 +69,15 @@ export default async function CaseDetailPage({
     ? caseData.memos.filter((m) => m.status === "submitted").length
     : 0;
 
+  const tasks = caseData.tasks.map((t) => ({
+    id: t.id,
+    taskNumber: t.taskNumber,
+    title: t.title,
+    status: displayTaskStatus(t),
+    assignedToName: t.assignedTo.fullName,
+    dueDate: t.dueDate?.toISOString() ?? null,
+  }));
+
   return (
     <CaseDetailView
       caseData={serializedCase}
@@ -75,6 +90,8 @@ export default async function CaseDetailPage({
       memos={memos}
       canAddMemo={canAuthorMemo(session.user.role)}
       pendingMemoReview={pendingMemoReview}
+      tasks={tasks}
+      taskUsers={taskUsers}
     />
   );
 }

@@ -92,12 +92,32 @@ export function intakeStageIndex(status: IntakeStatus): number {
 
 // ── الصلاحيات ──────────────────────────────────────────────
 
-/** التقييم والقرار والتفعيل: مسؤول النظام فقط. */
-export function canAssessIntake(role: UserRole): boolean {
-  return role === "system_admin";
+/**
+ * حفظ دراسة التقييم:
+ * - مسؤول النظام والمشرف دائمًا.
+ * - المُفوَّض إليه التقييم (assessmentDelegatedToId) — يعمل التقييم فقط دون القرار.
+ */
+export function canAssessIntake(
+  user: SessionUser,
+  intake: { assessmentDelegatedToId?: string | null }
+): boolean {
+  return (
+    user.role === "system_admin" ||
+    user.role === "supervisor" ||
+    intake.assessmentDelegatedToId === user.id
+  );
 }
-export const canDecideIntake = canAssessIntake;
-export const canActivateIntake = canAssessIntake;
+
+/** القرار (قبول/رفض) والتفعيل: مسؤول النظام والمشرف فقط — لا يملكهما المُفوَّض. */
+export function canDecideIntake(role: UserRole): boolean {
+  return role === "system_admin" || role === "supervisor";
+}
+export const canActivateIntake = canDecideIntake;
+
+/** تفويض التقييم لموظف آخر: مسؤول النظام والمشرف. */
+export function canDelegateAssessment(role: UserRole): boolean {
+  return role === "system_admin" || role === "supervisor";
+}
 
 /** بنك الرفضات: مسؤول النظام والمشرف. */
 export function canViewRejectedBank(role: UserRole): boolean {
@@ -107,17 +127,22 @@ export function canViewRejectedBank(role: UserRole): boolean {
 /**
  * رؤية طلبات الاستلام:
  * - مسؤول النظام والمشرف: الكل.
- * - غيرهم: فقط الطلبات التي استقبلوها.
+ * - غيرهم: الطلبات التي استقبلوها أو فُوِّض إليهم تقييمها.
  */
 export function intakeVisibilityWhere(user: SessionUser): Prisma.IntakeRequestWhereInput {
   if (isManagement(user.role) || user.role === "supervisor") return {};
-  return { receivedById: user.id };
+  return { OR: [{ receivedById: user.id }, { assessmentDelegatedToId: user.id }] };
 }
 
 /** هل يستطيع المستخدم فتح طلب استلام محدّد؟ */
 export function canAccessIntake(
   user: SessionUser,
-  intake: { receivedById: string }
+  intake: { receivedById: string; assessmentDelegatedToId?: string | null }
 ): boolean {
-  return isManagement(user.role) || user.role === "supervisor" || intake.receivedById === user.id;
+  return (
+    isManagement(user.role) ||
+    user.role === "supervisor" ||
+    intake.receivedById === user.id ||
+    intake.assessmentDelegatedToId === user.id
+  );
 }

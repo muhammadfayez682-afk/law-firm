@@ -43,8 +43,13 @@ model User {
   receivedIntakes     IntakeRequest[]      @relation("IntakeReceiver")
   assessedIntakes     IntakeRequest[]      @relation("IntakeAssessor")
   decidedIntakes      IntakeRequest[]      @relation("IntakeDecider")
+  delegatedAssessments IntakeRequest[]     @relation("IntakeAssessorDelegate")
+  delegatedByMe       IntakeRequest[]      @relation("IntakeDelegator")
   intakeDocuments     IntakeDocument[]
   intakeNotes         IntakeNote[]
+  assignedTasks       Task[]               @relation("TaskAssignee")
+  createdTasks        Task[]               @relation("TaskCreator")
+  taskComments        TaskComment[]
 
   @@map("users")
 }
@@ -177,6 +182,7 @@ model Case {
   reopenLogs             CaseReopenLog[]
   memos                  LegalMemo[]
   intakeRequest          IntakeRequest?
+  tasks                  Task[]
 
   @@map("cases")
 }
@@ -420,18 +426,21 @@ model FilledTemplate {
   id          String   @id @default(uuid())
   templateKey String
   caseId      String?
+  intakeId    String?
   sessionId   String?
   filledBy    String
   data        Json
   pdfPath     String?
   createdAt   DateTime @default(now())
 
-  case    Case?    @relation(fields: [caseId], references: [id])
-  session Session? @relation(fields: [sessionId], references: [id])
-  user    User     @relation(fields: [filledBy], references: [id])
+  case    Case?          @relation(fields: [caseId], references: [id])
+  intake  IntakeRequest? @relation(fields: [intakeId], references: [id])
+  session Session?       @relation(fields: [sessionId], references: [id])
+  user    User           @relation(fields: [filledBy], references: [id])
 
   @@index([templateKey])
   @@index([caseId])
+  @@index([intakeId])
   @@map("filled_templates")
 }
 
@@ -622,6 +631,12 @@ model IntakeRequest {
   // دراسة التقييم (من مسؤول النظام)
   assessmentBy      User?     @relation("IntakeAssessor", fields: [assessmentById], references: [id])
   assessmentById    String?
+  // تفويض التقييم لمستخدم آخر (يعمل التقييم، والقرار يبقى لمسؤول النظام/المشرف)
+  assessmentDelegatedTo   User?     @relation("IntakeAssessorDelegate", fields: [assessmentDelegatedToId], references: [id])
+  assessmentDelegatedToId String?
+  assessmentDelegatedBy   User?     @relation("IntakeDelegator", fields: [assessmentDelegatedById], references: [id])
+  assessmentDelegatedById String?
+  assessmentDelegatedAt   DateTime?
   legalBasis        String?   @db.Text // التكييف القانوني
   strengths         String?   @db.Text // نقاط القوة
   weaknesses        String?   @db.Text // نقاط الضعف
@@ -647,10 +662,12 @@ model IntakeRequest {
   case   Case?   @relation(fields: [caseId], references: [id])
   caseId String? @unique // القضية المُنشأة
 
-  documents IntakeDocument[]
-  notes     IntakeNote[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  documents       IntakeDocument[]
+  notes           IntakeNote[]
+  filledTemplates FilledTemplate[]
+  tasks           Task[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@map("intake_requests")
 }
@@ -678,4 +695,86 @@ model IntakeNote {
   createdAt DateTime      @default(now())
 
   @@map("intake_notes")
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  completed
+  cancelled
+  overdue // محسوبة تلقائيًا عند العرض (استحقاق فائت ولم تُنجَز)
+}
+
+enum TaskPriority {
+  low
+  normal
+  high
+  urgent
+}
+
+enum TaskCategory {
+  case_related // مرتبطة بقضية
+  administrative // إدارية
+  research // بحث
+  document_preparation // إعداد مستندات
+  meeting // اجتماع
+  follow_up // متابعة
+  personal // شخصية
+  other
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  taskNumber  String       @unique // ترقيم: TSK-2026-0001
+  title       String
+  description String?      @db.Text
+  category    TaskCategory
+
+  // الإسناد
+  assignedTo   User   @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  assignedToId String
+  assignedBy   User   @relation("TaskCreator", fields: [assignedById], references: [id])
+  assignedById String
+
+  // ربط اختياري بقضية أو طلب استلام
+  case     Case?          @relation(fields: [caseId], references: [id])
+  caseId   String?
+  intake   IntakeRequest? @relation(fields: [intakeId], references: [id])
+  intakeId String?
+
+  // التوقيت
+  dueDate     DateTime?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  status   TaskStatus   @default(pending)
+  priority TaskPriority @default(normal)
+
+  // نتيجة الإنجاز
+  completionNote String? @db.Text
+
+  // إلغاء ناعم — لا يُحذف السجل فعليًا
+  cancelledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments TaskComment[]
+
+  @@index([assignedToId, status])
+  @@index([caseId])
+  @@index([intakeId])
+  @@map("tasks")
+}
+
+model TaskComment {
+  id        String   @id @default(uuid())
+  task      Task     @relation(fields: [taskId], references: [id])
+  taskId    String
+  author    User     @relation(fields: [authorId], references: [id])
+  authorId  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("task_comments")
 }

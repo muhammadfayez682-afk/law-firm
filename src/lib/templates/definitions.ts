@@ -285,3 +285,15 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
 export function getTemplateDefinition(key: string): TemplateDefinition | undefined {
   return TEMPLATE_DEFINITIONS.find((t) => t.key === key);
 }
+
+/**
+ * النماذج القابلة للتعبئة في مرحلة الاستلام (قبل إنشاء القضية):
+ * النماذج التي لا تتطلّب قضية موجودة (`none` أو `case_optional`) وليست PDF ثابتًا.
+ */
+export function isIntakeEligibleTemplate(def: TemplateDefinition): boolean {
+  return !def.staticPdfPath && (def.linkedTo === "none" || def.linkedTo === "case_optional");
+}
+
+export function getIntakeTemplates(): TemplateDefinition[] {
+  return TEMPLATE_DEFINITIONS.filter(isIntakeEligibleTemplate);
+}

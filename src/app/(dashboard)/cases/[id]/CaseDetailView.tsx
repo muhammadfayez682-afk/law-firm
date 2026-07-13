@@ -25,12 +25,14 @@ import { ClosedCaseBanner } from "@/components/cases/ClosedCaseBanner";
 import { ScheduleSessionModal } from "@/components/modals/ScheduleSessionModal";
 import { UploadDocumentModal } from "@/components/modals/UploadDocumentModal";
 import { CaseClosureModal } from "@/components/modals/CaseClosureModal";
+import { NewTaskModal } from "@/components/modals/NewTaskModal";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
 import { MEMO_STATUS_LABELS_AR, MEMO_STATUS_STYLES } from "@/lib/memos";
+import { TASK_STATUS_LABELS_AR, TASK_STATUS_STYLES } from "@/lib/tasks";
 import { PARTY_ROLE_LABELS_AR } from "@/lib/parties";
 import { toEnglishDigits } from "@/lib/formatNumber";
-import type { MemoStatus } from "@prisma/client";
+import type { MemoStatus, TaskStatus, UserRole } from "@prisma/client";
 
 type CaseMemo = {
   id: string;
@@ -39,6 +41,15 @@ type CaseMemo = {
   status: MemoStatus;
   authorName: string;
   updatedAt: string;
+};
+
+type CaseTask = {
+  id: string;
+  taskNumber: string;
+  title: string;
+  status: TaskStatus;
+  assignedToName: string;
+  dueDate: string | null;
 };
 
 type FullCase = Omit<Case, "claimValue"> & {
@@ -128,6 +139,8 @@ export function CaseDetailView({
   memos,
   canAddMemo,
   pendingMemoReview,
+  tasks,
+  taskUsers,
 }: {
   caseData: FullCase;
   canEdit: boolean;
@@ -139,10 +152,13 @@ export function CaseDetailView({
   memos: CaseMemo[];
   canAddMemo: boolean;
   pendingMemoReview: number;
+  tasks: CaseTask[];
+  taskUsers: { id: string; fullName: string; role: UserRole }[];
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showClosureModal, setShowClosureModal] = useState(false);
+  const [showNewTask, setShowNewTask] = useState(false);
 
   const canRequestClosure =
     caseData.responsibleLawyerId === currentUserId && canTransitionToPendingClosure(caseData.status);
@@ -403,6 +419,41 @@ export function CaseDetailView({
         )}
       </section>
 
+      <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold text-navy">المهام</h2>
+          <button
+            type="button"
+            onClick={() => setShowNewTask(true)}
+            className="rounded-lg bg-navy px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-light"
+          >
+            + مهمة جديدة
+          </button>
+        </div>
+        {tasks.length === 0 ? (
+          <p className="text-sm text-foreground/50">لا توجد مهام لهذه القضية</p>
+        ) : (
+          <ul className="divide-y divide-black/5">
+            {tasks.map((t) => (
+              <li key={t.id} className="py-2.5">
+                <Link href={`/tasks/${t.id}`} className="flex items-center justify-between gap-3 text-sm hover:text-taradhi">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-navy">{t.title}</p>
+                    <p className="text-xs text-foreground/50">
+                      <span className="font-mono" dir="ltr">{t.taskNumber}</span> · {t.assignedToName}
+                      {t.dueDate ? ` · استحقاق ${formatDualDate(t.dueDate)}` : ""}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${TASK_STATUS_STYLES[t.status]}`}>
+                    {TASK_STATUS_LABELS_AR[t.status]}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
       {firstStage && settlementPlatform && (
         <SettlementPanel
           caseId={caseData.id}
@@ -571,6 +622,14 @@ export function CaseDetailView({
       )}
       {showClosureModal && (
         <CaseClosureModal caseId={caseData.id} onClose={() => setShowClosureModal(false)} />
+      )}
+      {showNewTask && (
+        <NewTaskModal
+          users={taskUsers}
+          presetCaseId={caseData.id}
+          currentUserId={currentUserId}
+          onClose={() => setShowNewTask(false)}
+        />
       )}
     </div>
   );

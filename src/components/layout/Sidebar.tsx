@@ -37,6 +37,8 @@ function buildNavGroups(role: UserRole): NavGroup[] {
         ...(role !== "secretary" && role !== "accountant"
           ? [{ href: "/memos", label: "المذكرات", icon: "memos" as const }]
           : []),
+        // المهام متاحة للجميع — كل شخص يرى مهامه ومهام فرق قضاياه.
+        { href: "/tasks", label: "المهام", icon: "tasks" },
         { href: "/calendar", label: "التقويم", icon: "calendar" },
       ],
     },
@@ -159,6 +161,14 @@ const ICONS: Record<NavItem["icon"], React.ReactNode> = {
     <path
       d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6M9 15l2 2 4-4"
       strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  tasks: (
+    <path
+      d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"
+      strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
     />

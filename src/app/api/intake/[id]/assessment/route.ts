@@ -13,13 +13,16 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   }
 
-  if (!canAssessIntake(session.user.role)) {
-    return NextResponse.json({ error: "دراسة التقييم متاحة لمسؤول النظام فقط" }, { status: 403 });
-  }
-
   const { id } = await params;
   const intake = await prisma.intakeRequest.findUnique({ where: { id } });
   if (!intake) return NextResponse.json({ error: "الطلب غير موجود" }, { status: 404 });
+
+  if (!canAssessIntake(session.user, intake)) {
+    return NextResponse.json(
+      { error: "دراسة التقييم متاحة لمسؤول النظام أو المشرف أو المُفوَّض إليه" },
+      { status: 403 }
+    );
+  }
 
   const body = await request.json();
 

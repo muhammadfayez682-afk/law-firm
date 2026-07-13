@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, caseVisibilityWhere } from "@/lib/rbac";
-import { getTemplateDefinition, type AutofillKey } from "@/lib/templates/definitions";
+import { canAccessIntake } from "@/lib/intake";
+import { getTemplateDefinition, isIntakeEligibleTemplate, type AutofillKey } from "@/lib/templates/definitions";
 import { formatDualDate, formatDualDateTime, getDayNameAr } from "@/lib/dateUtils";
 import { PARTY_ROLE_LABELS_AR } from "@/lib/parties";
 import { TemplateFillForm } from "./TemplateFillForm";
@@ -26,19 +27,22 @@ export default async function TemplateFillPage({
   searchParams,
 }: {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ caseId?: string; sessionId?: string }>;
+  searchParams: Promise<{ caseId?: string; sessionId?: string; intakeId?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
 
   const { key } = await params;
-  const { caseId, sessionId } = await searchParams;
+  const { caseId, sessionId, intakeId } = await searchParams;
 
   const definition = getTemplateDefinition(key);
   if (!definition || definition.staticPdfPath) notFound();
 
+  // سياق الاستلام: النموذج مرتبط بطلب استلام بدل قضية (للنماذج غير المرتبطة بقضية).
+  const intakeContext = intakeId && isIntakeEligibleTemplate(definition);
+
   const needsCase = definition.linkedTo === "case" || definition.linkedTo === "case_session";
-  const needsCaseOptional = definition.linkedTo === "case_optional";
+  const needsCaseOptional = definition.linkedTo === "case_optional" && !intakeContext;
   const needsSession = definition.linkedTo === "case_session";
 
   let selectedCase: Awaited<ReturnType<typeof loadCase>> | null = null;
@@ -80,6 +84,28 @@ export default async function TemplateFillPage({
     weekday: getDayNameAr(now),
   };
 
+  // سياق الاستلام: تحميل الطلب وتعبئة بيانات العميل الأولية.
+  let intakeInfo: { id: string; requestNumber: string } | null = null;
+  if (intakeContext && intakeId) {
+    const intake = await prisma.intakeRequest.findUnique({
+      where: { id: intakeId },
+      select: {
+        id: true,
+        requestNumber: true,
+        receivedById: true,
+        clientName: true,
+        clientPhone: true,
+        clientIdNumber: true,
+      },
+    });
+    if (intake && canAccessIntake(session.user, intake)) {
+      intakeInfo = { id: intake.id, requestNumber: intake.requestNumber };
+      autofillValues.clientName = intake.clientName;
+      autofillValues.clientPhone = intake.clientPhone ?? "";
+      autofillValues.clientNationalId = intake.clientIdNumber ?? "";
+    }
+  }
+
   if (selectedCase) {
     autofillValues.clientName = selectedCase.client.fullName;
     autofillValues.clientNationalId = selectedCase.client.nationalIdOrCr ?? "";
@@ -110,11 +136,12 @@ export default async function TemplateFillPage({
       </div>
 
       <TemplateFillForm
-        key={`${selectedCase?.id ?? "none"}-${selectedSession?.id ?? "none"}`}
+        key={`${selectedCase?.id ?? "none"}-${selectedSession?.id ?? "none"}-${intakeInfo?.id ?? "none"}`}
         definition={definition}
         autofillValues={autofillValues}
         selectedCaseId={selectedCase?.id ?? null}
         selectedSessionId={selectedSession?.id ?? null}
+        intakeContext={intakeInfo}
         availableCases={availableCases}
         availableSessions={availableSessions.map((s) => ({
           id: s.id,

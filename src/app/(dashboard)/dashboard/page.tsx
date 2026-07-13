@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { getDashboardStats } from "@/lib/dashboard-stats";
 import { getDayNameAr, formatTime } from "@/lib/dateUtils";
 import { isSystemAdmin } from "@/lib/rbac";
@@ -22,6 +23,19 @@ export default async function DashboardPage() {
 
   const stats = await getDashboardStats(session.user);
   const role = session.user.role;
+
+  // مؤشرات المهام الشخصية.
+  const now = new Date();
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const [myPendingTasks, overdueTasks, completedTasksThisWeek] = await Promise.all([
+    prisma.task.count({ where: { assignedToId: session.user.id, status: { in: ["pending", "in_progress"] } } }),
+    prisma.task.count({
+      where: { assignedToId: session.user.id, status: { in: ["pending", "in_progress"] }, dueDate: { lt: now } },
+    }),
+    prisma.task.count({
+      where: { assignedToId: session.user.id, status: "completed", completedAt: { gte: weekAgo } },
+    }),
+  ]);
 
   // مؤشرات لوحة التحكم تتكيّف مع دور المستخدم.
   let kpis: { label: string; value: number; accent: string }[];
@@ -67,6 +81,21 @@ export default async function DashboardPage() {
             </p>
           </div>
         ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Link href="/tasks?status=pending" className="rounded-xl border border-black/5 border-r-4 border-r-navy bg-white px-5 py-4 shadow-sm hover:bg-navy/5">
+          <p className="text-sm text-foreground/50">مهامي المعلقة</p>
+          <p className="mt-1 font-amiri text-2xl font-bold text-navy">{toEnglishDigits(myPendingTasks)}</p>
+        </Link>
+        <Link href="/tasks?status=overdue" className={`rounded-xl border border-r-4 px-5 py-4 shadow-sm ${overdueTasks > 0 ? "border-red-200 border-r-red-500 bg-red-50 hover:bg-red-100" : "border-black/5 border-r-red-500 bg-white hover:bg-navy/5"}`}>
+          <p className="text-sm text-foreground/50">مهام متأخرة</p>
+          <p className={`mt-1 font-amiri text-2xl font-bold ${overdueTasks > 0 ? "text-red-700" : "text-navy"}`}>{toEnglishDigits(overdueTasks)}</p>
+        </Link>
+        <Link href="/tasks" className="rounded-xl border border-black/5 border-r-4 border-r-emerald-500 bg-white px-5 py-4 shadow-sm hover:bg-navy/5">
+          <p className="text-sm text-foreground/50">أُنجزت هذا الأسبوع</p>
+          <p className="mt-1 font-amiri text-2xl font-bold text-navy">{toEnglishDigits(completedTasksThisWeek)}</p>
+        </Link>
       </div>
 
       {isSystemAdmin(role) && stats.pendingClosureCount > 0 && (

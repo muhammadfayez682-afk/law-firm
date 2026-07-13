@@ -27,6 +27,7 @@ export function TemplateFillForm({
   autofillValues,
   selectedCaseId,
   selectedSessionId,
+  intakeContext,
   availableCases,
   availableSessions,
 }: {
@@ -34,6 +35,7 @@ export function TemplateFillForm({
   autofillValues: Partial<Record<AutofillKey, string>>;
   selectedCaseId: string | null;
   selectedSessionId: string | null;
+  intakeContext?: { id: string; requestNumber: string } | null;
   availableCases: { id: string; internalNumber: string; title: string }[];
   availableSessions: { id: string; label: string }[];
 }) {
@@ -45,8 +47,9 @@ export function TemplateFillForm({
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  const inIntakeContext = Boolean(intakeContext);
   const needsCase = definition.linkedTo === "case" || definition.linkedTo === "case_session";
-  const needsCaseOptional = definition.linkedTo === "case_optional";
+  const needsCaseOptional = definition.linkedTo === "case_optional" && !inIntakeContext;
   const needsSession = definition.linkedTo === "case_session";
 
   function updateField(key: string, value: string) {
@@ -83,6 +86,7 @@ export function TemplateFillForm({
     return {
       caseId: selectedCaseId,
       sessionId: selectedSessionId,
+      intakeId: intakeContext?.id ?? null,
       data: { ...values, ...matrixValues },
     };
   }
@@ -153,6 +157,13 @@ export function TemplateFillForm({
 
   return (
     <div className="space-y-6">
+      {inIntakeContext && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          هذا النموذج مرتبط بطلب الاستلام{" "}
+          <span className="font-mono font-semibold" dir="ltr">{intakeContext?.requestNumber}</span>
+          {" "}— سينتقل تلقائيًا للقضية عند تفعيلها.
+        </div>
+      )}
       {(needsCase || needsCaseOptional) && (
         <div className="flex flex-wrap items-end gap-4 rounded-xl border border-black/5 bg-white p-4 shadow-sm">
           <div className="min-w-[240px]">
