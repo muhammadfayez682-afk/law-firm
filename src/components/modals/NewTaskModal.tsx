@@ -8,6 +8,7 @@ import {
   TASK_CATEGORY_LABELS_AR,
   TASK_PRIORITY_LABELS_AR,
 } from "@/lib/tasks";
+import { DefinedField } from "@/components/ui/DefinedField";
 
 const inputClass =
   "w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold";
@@ -110,8 +111,8 @@ export function NewTaskModal({
               </select>
             </div>
             <div>
-              <label className={labelClass}>الأولوية</label>
-              <select name="priority" defaultValue="normal" className={inputClass}>
+              <DefinedField definitionKey="task_priority" htmlFor="priority" />
+              <select id="priority" name="priority" defaultValue="normal" className={inputClass}>
                 {Object.entries(TASK_PRIORITY_LABELS_AR).map(([v, l]) => (
                   <option key={v} value={v as TaskPriority}>
                     {l}

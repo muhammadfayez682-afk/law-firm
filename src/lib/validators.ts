@@ -1,6 +1,24 @@
 // أدوات تحقق مشتركة (أرقام سعودية + قوة كلمة المرور).
 
 /**
+ * رسائل خطأ تعليمية موحّدة — تشرح القاعدة وتعطي مثالًا بدل «رقم غير صحيح».
+ * تُستخدم في الواجهة والـ API لتوحيد الصياغة.
+ */
+export const VALIDATION_MESSAGES = {
+  phone: "رقم الجوال يجب أن يكون 10 أرقام ويبدأ بـ 05 (مثال: 0501234567)",
+  nationalId: "رقم الهوية الوطنية يجب أن يبدأ بـ 1، والإقامة بـ 2 (10 أرقام)",
+  commercialRegister: "السجل التجاري يتكون من 10 أرقام",
+  agency: "رقم الوكالة يجب أن يكون بين 6 و15 رقمًا (كما في صك الوكالة من ناجز)",
+} as const;
+
+/** رسالة خطأ الهوية/السجل حسب نوع العميل. */
+export function nationalIdOrCrError(type: "individual" | "company"): string {
+  return type === "individual"
+    ? VALIDATION_MESSAGES.nationalId
+    : VALIDATION_MESSAGES.commercialRegister;
+}
+
+/**
  * توحيد صيغة الجوال السعودي إلى 05XXXXXXXX:
  * يحوّل +9665X / 9665X إلى 05X، ويحذف المسافات والشرطات.
  * يُستخدم قبل الحفظ والمقارنة لضمان صيغة واحدة تمنع التكرار المموّه.
@@ -21,9 +39,7 @@ export function isValidSaudiPhone(phone: string): boolean {
 export function saudiPhoneError(phone: string): string | null {
   const cleaned = normalizeSaudiPhone(phone);
   if (!cleaned) return "رقم الجوال مطلوب";
-  if (!/^\d+$/.test(cleaned)) return "رقم الجوال يجب أن يحتوي أرقامًا فقط";
-  if (!cleaned.startsWith("05")) return "رقم الجوال يجب أن يبدأ بـ 05";
-  if (cleaned.length !== 10) return "رقم الجوال يجب أن يكون 10 أرقام";
+  if (!/^05\d{8}$/.test(cleaned)) return VALIDATION_MESSAGES.phone;
   return null;
 }
 

@@ -10,7 +10,9 @@ import {
   isValidAgencyNumber,
   isValidNationalIdOrCr,
   isValidSaudiPhone,
+  nationalIdOrCrError,
   normalizeSaudiPhone,
+  VALIDATION_MESSAGES,
 } from "@/lib/validators";
 import {
   checkAgencyDuplicate,
@@ -113,23 +115,15 @@ export async function POST(request: NextRequest) {
   if (newClient) {
     const id = newClient.nationalIdOrCr?.trim();
     if (id && !isValidNationalIdOrCr(id, newClient.type)) {
-      return NextResponse.json(
-        {
-          error:
-            newClient.type === "individual"
-              ? "رقم الهوية/الإقامة غير صحيح"
-              : "رقم السجل التجاري غير صحيح (10 أرقام)",
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: nationalIdOrCrError(newClient.type) }, { status: 400 });
     }
     const phone = newClient.phone?.trim();
     if (phone && !isValidSaudiPhone(phone)) {
-      return NextResponse.json({ error: "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)" }, { status: 400 });
+      return NextResponse.json({ error: VALIDATION_MESSAGES.phone }, { status: 400 });
     }
   }
   if (agency?.agencyNumber && !isValidAgencyNumber(agency.agencyNumber.trim())) {
-    return NextResponse.json({ error: "رقم الوكالة غير صحيح (6-15 رقمًا)" }, { status: 400 });
+    return NextResponse.json({ error: VALIDATION_MESSAGES.agency }, { status: 400 });
   }
 
   // توحيد جوال العميل الجديد + فحص التكرار (جوال/هوية/وكالة) قبل الإنشاء.

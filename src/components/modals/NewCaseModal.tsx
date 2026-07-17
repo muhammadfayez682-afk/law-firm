@@ -10,6 +10,7 @@ import {
   PARTY_ROLE_LABELS_AR,
 } from "@/lib/parties";
 import { NumberField } from "@/components/ui/NumberField";
+import { DefinedField } from "@/components/ui/DefinedField";
 import { DuplicateWarningModal } from "@/components/modals/DuplicateWarningModal";
 import type { DuplicateMatch, DuplicateType } from "@/lib/duplicateCheck";
 
@@ -363,8 +364,8 @@ export function NewCaseModal({
                 </select>
               </div>
               <div className="col-span-2">
-                <label className={labelClass}>نطاق الوكالة</label>
-                <input name="scopeText" className={inputClass} />
+                <DefinedField definitionKey="agency_scope" htmlFor="scopeText" />
+                <input id="scopeText" name="scopeText" className={inputClass} />
                 {fieldErrors.scopeText && (
                   <p className="mt-1 text-xs text-red-600">{fieldErrors.scopeText}</p>
                 )}
@@ -400,8 +401,9 @@ export function NewCaseModal({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>نوع القضية</label>
+                  <DefinedField definitionKey="case_type" required htmlFor="caseType" />
                   <select
+                    id="caseType"
                     name="caseType"
                     value={selectedCaseType}
                     onChange={(e) => setSelectedCaseType(e.target.value)}
@@ -508,10 +510,9 @@ export function NewCaseModal({
             <h3 className={sectionTitleClass}>4. أطراف الدعوى</h3>
 
             <div className="mb-4 rounded-lg border-2 border-gold/40 bg-gold/5 p-4">
-              <label className={labelClass}>
-                صفة موكّلنا في الدعوى <span className="text-red-600">*</span>
-              </label>
+              <DefinedField definitionKey="client_party_role" required htmlFor="clientPartyRole" />
               <select
+                id="clientPartyRole"
                 value={clientPartyRole}
                 onChange={(e) => setClientPartyRole(e.target.value as PartyRole)}
                 className={inputClass}

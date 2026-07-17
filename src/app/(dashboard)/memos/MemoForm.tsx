@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { MEMO_TYPE_OPTIONS } from "@/lib/memos";
+import { DefinedField } from "@/components/ui/DefinedField";
 
 type MemoInitial = {
   id: string;
@@ -128,8 +129,8 @@ export function MemoForm({
           <input value={form.title} onChange={(e) => update("title", e.target.value)} className={inputClass} />
         </div>
         <div>
-          <label className={labelClass}>نوع المذكرة</label>
-          <select value={form.memoType} onChange={(e) => update("memoType", e.target.value)} className={inputClass}>
+          <DefinedField definitionKey="legal_memo" htmlFor="memoType" />
+          <select id="memoType" value={form.memoType} onChange={(e) => update("memoType", e.target.value)} className={inputClass}>
             {MEMO_TYPE_OPTIONS.map((t) => (
               <option key={t} value={t}>
                 {t}

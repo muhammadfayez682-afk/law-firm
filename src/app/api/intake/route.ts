@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { intakeVisibilityWhere } from "@/lib/intake";
 import { checkConflictOfInterest } from "@/lib/conflictCheck";
-import { isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import { isValidSaudiPhone, normalizeSaudiPhone, VALIDATION_MESSAGES } from "@/lib/validators";
 import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 import { notifyBulk } from "@/lib/notifications/send";
 import { getUserIdsByRoles } from "@/lib/notifications/recipients";
@@ -75,10 +75,10 @@ export async function POST(request: NextRequest) {
 
   if (!clientName) return NextResponse.json({ error: "اسم العميل مطلوب" }, { status: 400 });
   if (!clientPhone || !isValidSaudiPhone(clientPhone)) {
-    return NextResponse.json({ error: "رقم الجوال يجب أن يكون 10 أرقام يبدأ بـ 05" }, { status: 400 });
+    return NextResponse.json({ error: VALIDATION_MESSAGES.phone }, { status: 400 });
   }
   if (clientIdNumber && !/^\d{10}$/.test(clientIdNumber)) {
-    return NextResponse.json({ error: "رقم الهوية/السجل يجب أن يكون 10 أرقام" }, { status: 400 });
+    return NextResponse.json({ error: "رقم الهوية/السجل يجب أن يكون 10 أرقام (يبدأ بـ 1 للهوية أو 2 للإقامة)" }, { status: 400 });
   }
   if (disputeSummary.length < 30) {
     return NextResponse.json({ error: "ملخص النزاع يجب ألا يقل عن 30 حرفًا" }, { status: 400 });

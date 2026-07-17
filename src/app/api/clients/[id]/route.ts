@@ -3,7 +3,13 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessClient } from "@/lib/rbac";
-import { isValidNationalIdOrCr, isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import {
+  isValidNationalIdOrCr,
+  isValidSaudiPhone,
+  nationalIdOrCrError,
+  normalizeSaudiPhone,
+  VALIDATION_MESSAGES,
+} from "@/lib/validators";
 import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 
 type Params = { params: Promise<{ id: string }> };
@@ -59,19 +65,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const idValue = typeof body.nationalIdOrCr === "string" ? body.nationalIdOrCr.trim() : "";
   if (idValue && !isValidNationalIdOrCr(idValue, existing.type)) {
-    return NextResponse.json(
-      {
-        error:
-          existing.type === "individual"
-            ? "رقم الهوية/الإقامة غير صحيح"
-            : "رقم السجل التجاري غير صحيح (10 أرقام)",
-      },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: nationalIdOrCrError(existing.type) }, { status: 400 });
   }
   const phoneValue = typeof body.phone === "string" ? normalizeSaudiPhone(body.phone.trim()) : "";
   if (phoneValue && !isValidSaudiPhone(phoneValue)) {
-    return NextResponse.json({ error: "رقم الجوال يجب أن يكون 10 أرقام يبدأ بـ 05" }, { status: 400 });
+    return NextResponse.json({ error: VALIDATION_MESSAGES.phone }, { status: 400 });
   }
 
   const force = body.force === true;

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { CaseType, IntakeSource } from "@prisma/client";
 import { INTAKE_SOURCE_LABELS_AR } from "@/lib/intake";
-import { saudiPhoneError } from "@/lib/validators";
+import { saudiPhoneError, VALIDATION_MESSAGES } from "@/lib/validators";
 import { DuplicateWarningModal } from "@/components/modals/DuplicateWarningModal";
+import { DefinedField } from "@/components/ui/DefinedField";
 import type { DuplicateMatch, DuplicateResult, DuplicateType } from "@/lib/duplicateCheck";
 
 const CASE_TYPE_OPTIONS: { value: CaseType; label: string }[] = [
@@ -104,8 +105,8 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
     const formData = new FormData(e.currentTarget);
     const disputeSummary = String(formData.get("disputeSummary") || "").trim();
     if (!clientName.trim()) return setError("اسم العميل مطلوب");
-    if (saudiPhoneError(clientPhone)) return setError("رقم الجوال يجب أن يكون 10 أرقام يبدأ بـ 05");
-    if (clientIdNumber && clientIdNumber.length !== 10) return setError("رقم الهوية/السجل يجب أن يكون 10 أرقام");
+    if (saudiPhoneError(clientPhone)) return setError(VALIDATION_MESSAGES.phone);
+    if (clientIdNumber && clientIdNumber.length !== 10) return setError(VALIDATION_MESSAGES.nationalId);
     if (disputeSummary.length < 30) return setError("ملخص النزاع يجب ألا يقل عن 30 حرفًا");
 
     submit({
@@ -175,7 +176,7 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
                   className={inputClass}
                 />
                 {clientIdNumber && clientIdNumber.length !== 10 && (
-                  <p className="mt-1 text-xs text-red-600">رقم الهوية/السجل يجب أن يكون 10 أرقام</p>
+                  <p className="mt-1 text-xs text-red-600">{VALIDATION_MESSAGES.nationalId}</p>
                 )}
               </div>
             </div>
@@ -185,18 +186,13 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
             <h3 className={sectionTitleClass}>بيانات النزاع</h3>
             <div className="space-y-4">
               <div>
-                <label className={labelClass}>
-                  ملخص النزاع <span className="text-red-600">*</span>{" "}
-                  <span className="text-xs text-foreground/50">(30 حرفًا على الأقل)</span>
-                </label>
-                <textarea name="disputeSummary" rows={4} className={inputClass} />
+                <DefinedField definitionKey="dispute_summary" required htmlFor="disputeSummary" />
+                <textarea id="disputeSummary" name="disputeSummary" rows={4} className={inputClass} />
+                <p className="mt-1 text-xs text-foreground/50">30 حرفًا على الأقل</p>
               </div>
               <div>
-                <label className={labelClass}>
-                  الطرف المقابل <span className="text-red-600">*</span>{" "}
-                  <span className="text-xs text-foreground/50">(لفحص التعارض)</span>
-                </label>
-                <input name="opposingParty" required className={inputClass} />
+                <DefinedField definitionKey="opposing_party" required htmlFor="opposingParty" />
+                <input id="opposingParty" name="opposingParty" required className={inputClass} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>

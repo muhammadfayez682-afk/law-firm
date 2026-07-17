@@ -72,6 +72,12 @@ function buildNavGroups(role: UserRole): NavGroup[] {
     groups.push({ label: "الإدارة", items: adminItems });
   }
 
+  // مرجع المصطلحات القانونية — متاح للجميع.
+  groups.push({
+    label: "المرجع",
+    items: [{ href: "/glossary", label: "📖 قاموس المصطلحات", icon: "templates" }],
+  });
+
   // متاح لكل المستخدمين لتغيير كلمة المرور وضبط تفضيلات الإشعارات.
   groups.push({
     label: "الحساب",

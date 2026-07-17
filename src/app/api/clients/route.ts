@@ -4,7 +4,13 @@ import type { CaseStatus, ClientType, Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { clientVisibilityWhere } from "@/lib/rbac";
-import { isValidNationalIdOrCr, isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import {
+  isValidNationalIdOrCr,
+  isValidSaudiPhone,
+  nationalIdOrCrError,
+  normalizeSaudiPhone,
+  VALIDATION_MESSAGES,
+} from "@/lib/validators";
 import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 
 const CLOSED_STATUSES: CaseStatus[] = ["closed", "archived"];
@@ -17,13 +23,11 @@ function validateClientNumbers(body: {
 }): string | null {
   const idValue = typeof body.nationalIdOrCr === "string" ? body.nationalIdOrCr.trim() : "";
   if (idValue && body.type && !isValidNationalIdOrCr(idValue, body.type)) {
-    return body.type === "individual"
-      ? "رقم الهوية/الإقامة غير صحيح (10 أرقام تبدأ بـ1 أو 2 مع رقم تحقق صحيح)"
-      : "رقم السجل التجاري غير صحيح (10 أرقام)";
+    return nationalIdOrCrError(body.type);
   }
   const phoneValue = typeof body.phone === "string" ? body.phone.trim() : "";
   if (phoneValue && !isValidSaudiPhone(phoneValue)) {
-    return "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)";
+    return VALIDATION_MESSAGES.phone;
   }
   return null;
 }

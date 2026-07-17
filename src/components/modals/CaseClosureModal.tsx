@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { CaseOutcome, ClosureReason } from "@prisma/client";
 import { CASE_OUTCOME_LABELS_AR, CLOSURE_REASON_LABELS_AR } from "@/lib/caseClosure";
+import { DefinedField } from "@/components/ui/DefinedField";
 
 const OUTCOME_OPTIONS = Object.entries(CASE_OUTCOME_LABELS_AR) as [CaseOutcome, string][];
 const CLOSURE_REASON_OPTIONS = Object.entries(CLOSURE_REASON_LABELS_AR) as [ClosureReason, string][];
@@ -66,8 +67,9 @@ export function CaseClosureModal({ caseId, onClose }: { caseId: string; onClose:
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-navy">نتيجة القضية</label>
+            <DefinedField definitionKey="case_outcome" required htmlFor="outcome" />
             <select
+              id="outcome"
               name="outcome"
               required
               defaultValue=""
