@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase } from "@/lib/rbac";
 import { canReviewMemo } from "@/lib/memos";
+import { notify } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -78,6 +79,24 @@ export async function POST(request: NextRequest, { params }: Params) {
       resourceId: id,
     },
   });
+
+  // إشعار كاتب المذكرة (الباحث) بنتيجة المراجعة.
+  if (memo.authoredById !== session.user.id) {
+    await notify({
+      recipientId: memo.authoredById,
+      type: action === "approve" ? "memo_approved" : "memo_changes_requested",
+      priority: action === "approve" ? "normal" : "high",
+      title: action === "approve" ? "اعتُمدت مذكرتك" : "طُلبت تعديلات على مذكرتك",
+      message:
+        action === "approve"
+          ? `اعتُمدت المذكرة «${memo.title}».`
+          : `طُلبت تعديلات على المذكرة «${memo.title}»: ${comments}`,
+      actionUrl: `/memos/${id}`,
+      resourceType: "LegalMemo",
+      resourceId: id,
+      triggeredById: session.user.id,
+    });
+  }
 
   return NextResponse.json(updated);
 }

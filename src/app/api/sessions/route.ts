@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditCase, caseVisibilityWhere } from "@/lib/rbac";
-import { toHijri } from "@/lib/dateUtils";
+import { toHijri, formatDualDate } from "@/lib/dateUtils";
+import { notifyBulk } from "@/lib/notifications/send";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -79,6 +80,22 @@ export async function POST(request: NextRequest) {
       resourceType: "Session",
       resourceId: created.id,
     },
+  });
+
+  // إشعار فريق القضية بجدولة الجلسة.
+  const caseNo = caseData.displayNumber ?? caseData.internalNumber;
+  const teamIds = [caseData.responsibleLawyerId, ...caseData.team.map((m) => m.userId)].filter(
+    (uid) => uid !== session.user.id
+  );
+  await notifyBulk(teamIds, {
+    type: "session_scheduled",
+    priority: "normal",
+    title: "جُدولت جلسة",
+    message: `جلسة جديدة في القضية ${caseNo} بتاريخ ${formatDualDate(sessionDate)}.`,
+    actionUrl: `/cases/${body.caseId}`,
+    resourceType: "session",
+    resourceId: created.id,
+    triggeredById: session.user.id,
   });
 
   return NextResponse.json(created, { status: 201 });

@@ -9,6 +9,8 @@ import {
   canTransitionToPendingClosure,
   validateClosureRequestInput,
 } from "@/lib/caseClosure";
+import { notify, notifyBulk } from "@/lib/notifications/send";
+import { getUserIdsByRoles } from "@/lib/notifications/recipients";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -82,6 +84,18 @@ export async function POST(request: NextRequest, { params }: Params) {
     }),
   ]);
 
+  // إشعار مسؤولي النظام بطلب إغلاق ينتظر الاعتماد.
+  await notifyBulk(await getUserIdsByRoles(["system_admin"]), {
+    type: "case_closure_requested",
+    priority: "high",
+    title: "طلب إغلاق قضية",
+    message: `طُلب إغلاق القضية «${caseData.title}» (${caseData.internalNumber}) وينتظر اعتمادك.`,
+    actionUrl: `/cases/${id}`,
+    resourceType: "Case",
+    resourceId: id,
+    triggeredById: session.user.id,
+  });
+
   return NextResponse.json(closureRequest, { status: 201 });
 }
 
@@ -97,7 +111,10 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const { id } = await params;
 
-  const closureRequest = await prisma.caseClosureRequest.findUnique({ where: { caseId: id } });
+  const closureRequest = await prisma.caseClosureRequest.findUnique({
+    where: { caseId: id },
+    include: { case: { select: { title: true, internalNumber: true } } },
+  });
   if (!closureRequest || closureRequest.status !== "pending_approval") {
     return NextResponse.json({ error: "لا يوجد طلب إغلاق قيد الانتظار لهذه القضية" }, { status: 404 });
   }
@@ -144,6 +161,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       },
     }),
   ]);
+
+  // إشعار طالب الإغلاق (المحامي المسؤول) بنتيجة الاعتماد.
+  if (closureRequest.requestedById !== session.user.id) {
+    await notify({
+      recipientId: closureRequest.requestedById,
+      type: action === "approve" ? "case_closure_approved" : "case_closure_rejected",
+      priority: action === "approve" ? "normal" : "high",
+      title: action === "approve" ? "اعتُمد إغلاق القضية" : "رُفض طلب إغلاق القضية",
+      message:
+        action === "approve"
+          ? `اعتُمد إغلاق القضية «${closureRequest.case.title}» (${closureRequest.case.internalNumber}).`
+          : `رُفض طلب إغلاق القضية «${closureRequest.case.title}»: ${body.rejectionNote.trim()}`,
+      actionUrl: `/cases/${id}`,
+      resourceType: "Case",
+      resourceId: id,
+      triggeredById: session.user.id,
+    });
+  }
 
   return NextResponse.json({ closureRequest: updatedRequest, case: updatedCase });
 }

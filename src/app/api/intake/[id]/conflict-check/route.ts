@@ -4,6 +4,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessIntake } from "@/lib/intake";
 import { checkConflictOfInterest } from "@/lib/conflictCheck";
+import { notifyBulk } from "@/lib/notifications/send";
+import { getUserIdsByRoles } from "@/lib/notifications/recipients";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -40,6 +42,19 @@ export async function POST(_request: NextRequest, { params }: Params) {
       resourceId: id,
     },
   });
+
+  if (conflict.result === "confirmed") {
+    await notifyBulk(await getUserIdsByRoles(["system_admin"]), {
+      type: "intake_conflict_detected",
+      priority: "urgent",
+      title: "تعارض مصالح مؤكد",
+      message: `فحص التعارض في الطلب ${intake.requestNumber} أظهر تعارضًا مؤكدًا.`,
+      actionUrl: `/intake/${id}`,
+      resourceType: "IntakeRequest",
+      resourceId: id,
+      triggeredById: session.user.id,
+    });
+  }
 
   return NextResponse.json({ ...updated, conflict });
 }

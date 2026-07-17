@@ -1,7 +1,10 @@
-import { PrismaClient } from "@prisma/client";
-import type { CaseType, PartyRole, Prisma } from "@prisma/client";
+import { PrismaClient, NotificationType } from "@prisma/client";
+import type { CaseType, NotificationChannel, PartyRole, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
+
+// كل أنواع الإشعارات مشتقّة من enum المولّد (تبقى متزامنة مع schema.prisma).
+const ALL_NOTIFICATION_TYPES = Object.values(NotificationType);
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
@@ -851,6 +854,58 @@ async function main() {
     if (!existing) {
       await prisma.task.create({ data: t });
     }
+  }
+
+  // ===== تفضيلات الإشعارات الافتراضية لكل المستخدمين (كل نوع → داخل النظام) =====
+  const allUsersForPrefs = await prisma.user.findMany({ select: { id: true } });
+  await prisma.notificationPreference.createMany({
+    data: allUsersForPrefs.flatMap((u) =>
+      ALL_NOTIFICATION_TYPES.map((type) => ({
+        userId: u.id,
+        type,
+        channels: ["in_app"] as NotificationChannel[],
+      }))
+    ),
+    skipDuplicates: true,
+  });
+
+  // ===== إشعارات تجريبية (20): 8 غير مقروءة + 12 مقروءة قديمة =====
+  const existingNotifs = await prisma.notification.count();
+  if (existingNotifs === 0) {
+    const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 3600 * 1000);
+    const minsAgo = (n: number) => new Date(Date.now() - n * 60 * 1000);
+    const caseUrl = (id: string) => `/cases/${id}`;
+
+    const sampleNotifs: Prisma.NotificationCreateManyInput[] = [
+      // --- 8 غير مقروءة ---
+      // 2 عاجلة
+      { recipientId: anas.id, type: "intake_conflict_detected", priority: "urgent", title: "تعارض مصالح مؤكد", message: "فحص التعارض في الطلب INT-2026-0005 أظهر تعارضًا مؤكدًا.", actionUrl: "/intake", resourceType: "IntakeRequest", isRead: false, createdAt: minsAgo(5) },
+      { recipientId: lamia.id, type: "session_reminder_hour", priority: "urgent", title: "جلسة خلال ساعة", message: `جلسة في القضية ${personalStatusCase.internalNumber} خلال ساعة تقريبًا.`, actionUrl: caseUrl(personalStatusCase.id), resourceType: "session", isRead: false, createdAt: minsAgo(20) },
+      // 3 مهمة
+      { recipientId: lamia.id, type: "memo_pending_review", priority: "high", title: "مذكرة بانتظار مراجعتك", message: "المذكرة «مذكرة دفاع أولية — نزاع المقاولة» أُرسلت لمراجعتك.", actionUrl: "/memos", resourceType: "LegalMemo", isRead: false, createdAt: minsAgo(90), triggeredById: sultan.id },
+      { recipientId: anas.id, type: "case_closure_requested", priority: "high", title: "طلب إغلاق قضية", message: `طُلب إغلاق القضية «نزاع تجاري» (${commercialCase.internalNumber}) وينتظر اعتمادك.`, actionUrl: caseUrl(commercialCase.id), resourceType: "Case", isRead: false, createdAt: minsAgo(200) },
+      { recipientId: sultan.id, type: "task_overdue", priority: "high", title: "مهمة متأخرة", message: "المهمة «إعداد مذكرة الرد» تجاوزت موعد استحقاقها.", actionUrl: "/tasks", resourceType: "Task", isRead: false, createdAt: minsAgo(300) },
+      // 3 عادية
+      { recipientId: abdulrahman.id, type: "intake_new", priority: "normal", title: "طلب استلام جديد", message: "طلب جديد من مؤسسة الريادة الطبية (INT-2026-0003).", actionUrl: "/intake", resourceType: "IntakeRequest", isRead: false, createdAt: minsAgo(400) },
+      { recipientId: omar.id, type: "session_scheduled", priority: "normal", title: "جُدولت جلسة", message: `جلسة جديدة في القضية ${commercialTaradhiCase.internalNumber}.`, actionUrl: caseUrl(commercialTaradhiCase.id), resourceType: "session", isRead: false, createdAt: minsAgo(600) },
+      { recipientId: yazid.id, type: "task_assigned", priority: "normal", title: "أُسندت إليك مهمة", message: "المهمة «بحث سوابق قضائية» (TSK-2026-0002).", actionUrl: "/tasks", resourceType: "Task", isRead: false, createdAt: minsAgo(800) },
+
+      // --- 12 مقروءة قديمة ---
+      { recipientId: sultan.id, type: "memo_approved", priority: "normal", title: "اعتُمدت مذكرتك", message: "اعتُمدت المذكرة «مذكرة دفاع أولية».", actionUrl: "/memos", resourceType: "LegalMemo", isRead: true, readAt: daysAgo(9), createdAt: daysAgo(10) },
+      { recipientId: yazid.id, type: "memo_changes_requested", priority: "high", title: "طُلبت تعديلات على مذكرتك", message: "طُلبت تعديلات على المذكرة «مذكرة رد».", actionUrl: "/memos", resourceType: "LegalMemo", isRead: true, readAt: daysAgo(11), createdAt: daysAgo(12) },
+      { recipientId: lamia.id, type: "case_assigned", priority: "normal", title: "أُسندت إليك قضية", message: `أُسندت إليك القضية «${personalStatusCase.internalNumber}».`, actionUrl: caseUrl(personalStatusCase.id), resourceType: "Case", isRead: true, readAt: daysAgo(14), createdAt: daysAgo(15) },
+      { recipientId: sahar.id, type: "case_reopened", priority: "normal", title: "أُعيد فتح قضية", message: "أُعيد فتح قضية عمالية.", actionUrl: caseUrl(laborCase.id), resourceType: "Case", isRead: true, readAt: daysAgo(16), createdAt: daysAgo(17) },
+      { recipientId: anas.id, type: "agency_expiring_soon", priority: "normal", title: "وكالة تقترب من الانتهاء", message: "وكالة العميل عبدالله الحربي تنتهي خلال 30 يومًا.", actionUrl: `/clients/${individualClient.id}`, resourceType: "agency", isRead: true, readAt: daysAgo(18), createdAt: daysAgo(20) },
+      { recipientId: sahar.id, type: "settlement_deadline_soon", priority: "normal", title: "مهلة تسوية تقترب", message: `مهلة التسوية في القضية ${laborCase.internalNumber} تقترب.`, actionUrl: caseUrl(laborCase.id), resourceType: "settlement", isRead: true, readAt: daysAgo(19), createdAt: daysAgo(21) },
+      { recipientId: omar.id, type: "task_completed", priority: "normal", title: "أُنجزت مهمة أسندتها", message: "أُنجزت المهمة «مراجعة عقد».", actionUrl: "/tasks", resourceType: "Task", isRead: true, readAt: daysAgo(22), createdAt: daysAgo(23) },
+      { recipientId: yazid.id, type: "task_comment_added", priority: "normal", title: "ملاحظة جديدة على مهمة", message: "أُضيفت ملاحظة على مهمتك.", actionUrl: "/tasks", resourceType: "Task", isRead: true, readAt: daysAgo(24), createdAt: daysAgo(25) },
+      { recipientId: anas.id, type: "intake_accepted", priority: "normal", title: "قُبل طلب استلام", message: "قُبل طلب الاستلام INT-2026-0001.", actionUrl: "/intake", resourceType: "IntakeRequest", isRead: true, readAt: daysAgo(26), createdAt: daysAgo(28) },
+      { recipientId: abdulrahman.id, type: "intake_rejected", priority: "normal", title: "رُفض طلب استلام", message: "رُفض طلب الاستلام INT-2026-0005.", actionUrl: "/intake", resourceType: "IntakeRequest", isRead: true, readAt: daysAgo(27), createdAt: daysAgo(29) },
+      { recipientId: lamia.id, type: "case_number_added", priority: "normal", title: "أُضيف رقم المحكمة", message: `أُضيف رقم المحكمة للقضية ${commercialCase.internalNumber}.`, actionUrl: caseUrl(commercialCase.id), resourceType: "Case", isRead: true, readAt: daysAgo(30), createdAt: daysAgo(32) },
+      { recipientId: anas.id, type: "invoice_overdue", priority: "high", title: "فاتورة متأخرة", message: "فاتورة العميل شركة الأفق تجاوزت موعد استحقاقها.", actionUrl: "/invoices", resourceType: "invoice", isRead: true, readAt: daysAgo(33), createdAt: daysAgo(35) },
+    ];
+
+    await prisma.notification.createMany({ data: sampleNotifs });
   }
 
   // احتساب displayNumber لكل القضايا (المحكمة ← قوى/تراضي ← الداخلي) بشكل

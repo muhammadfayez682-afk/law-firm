@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase, canEditCase, isManagement } from "@/lib/rbac";
 import { canProceedToCourt } from "@/lib/caseFlow";
 import { syncCaseDisplayNumber } from "@/lib/caseNumber.server";
+import { notifyBulk } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -112,11 +113,27 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     include: { client: true, responsibleLawyer: true, amicableSettlement: true },
   });
 
-  // إعادة حساب الرقم المعروض عند تغيّر رقم المحكمة (يتحوّل الرقم للرسمي، أو يعود
+  // إعادة حساب الرقم المعروض عند تغيّر رقم المحكمة (يتحوّل الرقم للرسمي, أو يعود
   // للتسوية/الداخلي إن أُزيل).
   if (courtCaseNumber !== undefined) {
     const displayNumber = await syncCaseDisplayNumber(prisma, id);
     if (displayNumber !== null) updated.displayNumber = displayNumber;
+
+    // إشعار فريق القضية عند إضافة رقم محكمة جديد (لم يكن موجودًا من قبل).
+    const trimmed = typeof courtCaseNumber === "string" ? courtCaseNumber.trim() : "";
+    if (trimmed && trimmed !== (existing.courtCaseNumber ?? "")) {
+      const teamIds = existing.team.map((m) => m.userId).filter((uid) => uid !== session.user.id);
+      await notifyBulk(teamIds, {
+        type: "case_number_added",
+        priority: "normal",
+        title: "أُضيف رقم المحكمة",
+        message: `أُضيف رقم المحكمة الرسمي (${trimmed}) للقضية.`,
+        actionUrl: `/cases/${id}`,
+        resourceType: "Case",
+        resourceId: id,
+        triggeredById: session.user.id,
+      });
+    }
   }
 
   await prisma.auditLog.create({

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canChangeTaskStatus, canManageTask } from "@/lib/tasks";
+import { notify } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -55,6 +56,21 @@ export async function POST(request: NextRequest, { params }: Params) {
   await prisma.auditLog.create({
     data: { userId: session.user.id, action: "update", resourceType: "Task", resourceId: id },
   });
+
+  // إشعار مُسنِد المهمة عند إنجازها (إن كان غير المُنجِز).
+  if (data.status === "completed" && task.assignedById !== session.user.id) {
+    await notify({
+      recipientId: task.assignedById,
+      type: "task_completed",
+      priority: "normal",
+      title: "أُنجزت مهمة أسندتها",
+      message: `أُنجزت المهمة «${task.title}» (${task.taskNumber}).`,
+      actionUrl: `/tasks/${id}`,
+      resourceType: "Task",
+      resourceId: id,
+      triggeredById: session.user.id,
+    });
+  }
 
   return NextResponse.json(updated);
 }

@@ -19,6 +19,7 @@ import {
   duplicatePayload,
 } from "@/lib/duplicateCheck";
 import type { CaseType, PartyRole } from "@prisma/client";
+import { notify } from "@/lib/notifications/send";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -279,6 +280,21 @@ export async function POST(request: NextRequest) {
         resourceId: created.id,
       },
     });
+
+    // إشعار المحامي المسؤول بإسناد القضية (إن لم يكن هو المُنشئ).
+    if (created.responsibleLawyerId !== session.user.id) {
+      await notify({
+        recipientId: created.responsibleLawyerId,
+        type: "case_assigned",
+        priority: "normal",
+        title: "أُسندت إليك قضية",
+        message: `أُسندت إليك القضية «${created.title}» (${created.internalNumber}).`,
+        actionUrl: `/cases/${created.id}`,
+        resourceType: "Case",
+        resourceId: created.id,
+        triggeredById: session.user.id,
+      });
+    }
 
     return NextResponse.json(created, { status: 201 });
   } catch {

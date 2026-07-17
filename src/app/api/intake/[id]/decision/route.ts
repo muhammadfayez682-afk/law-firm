@@ -4,6 +4,7 @@ import type { RejectionReason } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canDecideIntake, REJECTION_REASON_LABELS_AR } from "@/lib/intake";
+import { notify } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -51,6 +52,19 @@ export async function POST(request: NextRequest, { params }: Params) {
     await prisma.auditLog.create({
       data: { userId: session.user.id, action: "update", resourceType: "IntakeRequest", resourceId: id },
     });
+    if (intake.receivedById !== session.user.id) {
+      await notify({
+        recipientId: intake.receivedById,
+        type: "intake_rejected",
+        priority: "normal",
+        title: "رُفض طلب استلام",
+        message: `رُفض طلب الاستلام ${intake.requestNumber}.`,
+        actionUrl: `/intake/${id}`,
+        resourceType: "IntakeRequest",
+        resourceId: id,
+        triggeredById: session.user.id,
+      });
+    }
     return NextResponse.json(updated);
   }
 
@@ -67,5 +81,18 @@ export async function POST(request: NextRequest, { params }: Params) {
   await prisma.auditLog.create({
     data: { userId: session.user.id, action: "update", resourceType: "IntakeRequest", resourceId: id },
   });
+  if (intake.receivedById !== session.user.id) {
+    await notify({
+      recipientId: intake.receivedById,
+      type: "intake_accepted",
+      priority: "normal",
+      title: "قُبل طلب استلام",
+      message: `قُبل طلب الاستلام ${intake.requestNumber} وانتقل لمرحلة عقد الأتعاب.`,
+      actionUrl: `/intake/${id}`,
+      resourceType: "IntakeRequest",
+      resourceId: id,
+      triggeredById: session.user.id,
+    });
+  }
   return NextResponse.json(updated);
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { notifyBulk } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -13,7 +14,10 @@ export async function POST(_request: NextRequest, { params }: Params) {
   }
 
   const { id } = await params;
-  const memo = await prisma.legalMemo.findUnique({ where: { id } });
+  const memo = await prisma.legalMemo.findUnique({
+    where: { id },
+    include: { case: { include: { team: true } } },
+  });
   if (!memo) {
     return NextResponse.json({ error: "المذكرة غير موجودة" }, { status: 404 });
   }
@@ -43,6 +47,22 @@ export async function POST(_request: NextRequest, { params }: Params) {
       resourceType: "LegalMemo",
       resourceId: id,
     },
+  });
+
+  // إشعار مراجعي القضية (المحامي المسؤول + مشرفو/محامو الفريق) بمذكرة بانتظار المراجعة.
+  const reviewerIds = [
+    memo.case.responsibleLawyerId,
+    ...memo.case.team.filter((m) => m.roleInCase === "lawyer" || m.roleInCase === "supervisor").map((m) => m.userId),
+  ].filter((uid) => uid !== session.user.id);
+  await notifyBulk(reviewerIds, {
+    type: "memo_pending_review",
+    priority: "high",
+    title: "مذكرة بانتظار مراجعتك",
+    message: `المذكرة «${memo.title}» أُرسلت لمراجعتك.`,
+    actionUrl: `/memos/${id}`,
+    resourceType: "LegalMemo",
+    resourceId: id,
+    triggeredById: session.user.id,
   });
 
   return NextResponse.json(updated);

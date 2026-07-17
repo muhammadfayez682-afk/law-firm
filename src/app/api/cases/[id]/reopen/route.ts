@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isSystemAdmin } from "@/lib/rbac";
 import { CASE_STATUS_AFTER_REOPEN } from "@/lib/caseClosure";
+import { notifyBulk } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -19,7 +20,10 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const { id } = await params;
 
-  const caseData = await prisma.case.findUnique({ where: { id } });
+  const caseData = await prisma.case.findUnique({
+    where: { id },
+    include: { team: true },
+  });
   if (!caseData) {
     return NextResponse.json({ error: "القضية غير موجودة" }, { status: 404 });
   }
@@ -52,6 +56,21 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     }),
   ]);
+
+  // إشعار فريق القضية بإعادة الفتح.
+  const teamIds = [caseData.responsibleLawyerId, ...caseData.team.map((m) => m.userId)].filter(
+    (uid) => uid !== session.user.id
+  );
+  await notifyBulk(teamIds, {
+    type: "case_reopened",
+    priority: "normal",
+    title: "أُعيد فتح قضية",
+    message: `أُعيد فتح القضية «${caseData.title}» (${caseData.internalNumber}): ${reason}`,
+    actionUrl: `/cases/${id}`,
+    resourceType: "Case",
+    resourceId: id,
+    triggeredById: session.user.id,
+  });
 
   return NextResponse.json({ reopenLog, case: updatedCase });
 }

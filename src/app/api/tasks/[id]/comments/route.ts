@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessTask } from "@/lib/tasks";
+import { notifyBulk } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const task = await prisma.task.findUnique({
     where: { id },
-    select: { id: true, assignedToId: true, assignedById: true },
+    select: { id: true, assignedToId: true, assignedById: true, title: true, taskNumber: true },
   });
   if (!task) return NextResponse.json({ error: "المهمة غير موجودة" }, { status: 404 });
   if (!canAccessTask(session.user, task)) {
@@ -32,6 +33,19 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   await prisma.auditLog.create({
     data: { userId: session.user.id, action: "create", resourceType: "TaskComment", resourceId: comment.id },
+  });
+
+  // إشعار الطرف الآخر في المهمة (المسند إليه/المسنِد) عدا كاتب الملاحظة.
+  const otherPartyIds = [task.assignedToId, task.assignedById].filter((uid) => uid !== session.user.id);
+  await notifyBulk(otherPartyIds, {
+    type: "task_comment_added",
+    priority: "normal",
+    title: "ملاحظة جديدة على مهمة",
+    message: `أُضيفت ملاحظة على المهمة «${task.title}» (${task.taskNumber}).`,
+    actionUrl: `/tasks/${id}`,
+    resourceType: "Task",
+    resourceId: id,
+    triggeredById: session.user.id,
   });
 
   return NextResponse.json(comment, { status: 201 });

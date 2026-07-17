@@ -7,6 +7,8 @@ import { intakeVisibilityWhere } from "@/lib/intake";
 import { checkConflictOfInterest } from "@/lib/conflictCheck";
 import { isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
 import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
+import { notifyBulk } from "@/lib/notifications/send";
+import { getUserIdsByRoles } from "@/lib/notifications/recipients";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -133,6 +135,31 @@ export async function POST(request: NextRequest) {
   if (force) {
     await prisma.intakeNote.create({
       data: { intakeId: created.id, authorId: session.user.id, content: "حُفظ الطلب رغم تحذير تكرار (تأكيد المستخدم)." },
+    });
+  }
+
+  // إشعارات: طلب استلام جديد لكل مسؤولي النظام (عدا المُنشئ)، وتعارض مؤكد (عاجل).
+  const adminIds = (await getUserIdsByRoles(["system_admin"])).filter((id) => id !== session.user.id);
+  await notifyBulk(adminIds, {
+    type: "intake_new",
+    priority: "normal",
+    title: "طلب استلام جديد",
+    message: `طلب جديد من ${clientName} (${created.requestNumber}).`,
+    actionUrl: `/intake/${created.id}`,
+    resourceType: "IntakeRequest",
+    resourceId: created.id,
+    triggeredById: session.user.id,
+  });
+  if (conflict.result === "confirmed") {
+    await notifyBulk(await getUserIdsByRoles(["system_admin"]), {
+      type: "intake_conflict_detected",
+      priority: "urgent",
+      title: "تعارض مصالح مؤكد",
+      message: `فحص التعارض في الطلب ${created.requestNumber} أظهر تعارضًا مؤكدًا مع ${opposingParty}.`,
+      actionUrl: `/intake/${created.id}`,
+      resourceType: "IntakeRequest",
+      resourceId: created.id,
+      triggeredById: session.user.id,
     });
   }
 

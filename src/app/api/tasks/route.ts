@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
 import { canAssignTaskTo, taskVisibilityWhere } from "@/lib/tasks";
+import { notify } from "@/lib/notifications/send";
 
 const CATEGORIES: TaskCategory[] = [
   "case_related",
@@ -177,6 +178,21 @@ export async function POST(request: NextRequest) {
       resourceId: created.id,
     },
   });
+
+  // إشعار المسند إليه (إن كان غير المُنشئ).
+  if (created.assignedToId !== session.user.id) {
+    await notify({
+      recipientId: created.assignedToId,
+      type: "task_assigned",
+      priority: created.priority === "urgent" ? "urgent" : created.priority === "high" ? "high" : "normal",
+      title: "أُسندت إليك مهمة",
+      message: `المهمة «${created.title}» (${created.taskNumber}).`,
+      actionUrl: `/tasks/${created.id}`,
+      resourceType: "Task",
+      resourceId: created.id,
+      triggeredById: session.user.id,
+    });
+  }
 
   return NextResponse.json(created, { status: 201 });
 }

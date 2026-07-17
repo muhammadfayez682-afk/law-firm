@@ -72,10 +72,13 @@ function buildNavGroups(role: UserRole): NavGroup[] {
     groups.push({ label: "الإدارة", items: adminItems });
   }
 
-  // متاح لكل المستخدمين لتغيير كلمة المرور.
+  // متاح لكل المستخدمين لتغيير كلمة المرور وضبط تفضيلات الإشعارات.
   groups.push({
     label: "الحساب",
-    items: [{ href: "/settings/account", label: "حسابي", icon: "settings" }],
+    items: [
+      { href: "/settings/account", label: "حسابي", icon: "settings" },
+      { href: "/settings/notifications", label: "تفضيلات الإشعارات", icon: "settings" },
+    ],
   });
 
   return groups;

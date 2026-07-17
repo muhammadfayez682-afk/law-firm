@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAssessIntake } from "@/lib/intake";
+import { notifyBulk } from "@/lib/notifications/send";
+import { getUserIdsByRoles } from "@/lib/notifications/recipients";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -54,6 +56,21 @@ export async function POST(request: NextRequest, { params }: Params) {
       resourceType: "IntakeRequest",
       resourceId: id,
     },
+  });
+
+  // اكتمل التقييم → إشعار مسؤولي النظام والمشرفين لاتخاذ القرار.
+  const deciderIds = (await getUserIdsByRoles(["system_admin", "supervisor"])).filter(
+    (uid) => uid !== session.user.id
+  );
+  await notifyBulk(deciderIds, {
+    type: "intake_pending_decision",
+    priority: "normal",
+    title: "طلب بانتظار القرار",
+    message: `اكتمل تقييم الطلب ${intake.requestNumber} وينتظر قرار القبول/الرفض.`,
+    actionUrl: `/intake/${id}`,
+    resourceType: "IntakeRequest",
+    resourceId: id,
+    triggeredById: session.user.id,
   });
 
   return NextResponse.json(updated);

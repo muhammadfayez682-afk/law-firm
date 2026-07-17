@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canDelegateAssessment } from "@/lib/intake";
+import { notify } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -57,6 +58,18 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   await prisma.auditLog.create({
     data: { userId: session.user.id, action: "update", resourceType: "IntakeRequest", resourceId: id },
+  });
+
+  await notify({
+    recipientId: delegateToId,
+    type: "intake_assessment_delegated",
+    priority: "high",
+    title: "فُوِّض إليك تقييم طلب",
+    message: `فُوِّض إليك تقييم طلب الاستلام ${intake.requestNumber}.`,
+    actionUrl: `/intake/${id}`,
+    resourceType: "IntakeRequest",
+    resourceId: id,
+    triggeredById: session.user.id,
   });
 
   return NextResponse.json(updated);
