@@ -5,7 +5,7 @@ import type { Prisma, UserRole } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
-import { isValidSaudiPhone, passwordStrengthError } from "@/lib/validators";
+import { isValidSaudiPhone, normalizeSaudiPhone, passwordStrengthError } from "@/lib/validators";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -42,9 +42,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     data.fullName = body.fullName.trim();
   }
   if (body.phone !== undefined) {
-    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+    const phone = typeof body.phone === "string" && body.phone.trim() ? normalizeSaudiPhone(body.phone.trim()) : "";
     if (phone && !isValidSaudiPhone(phone)) {
-      return NextResponse.json({ error: "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)" }, { status: 400 });
+      return NextResponse.json({ error: "رقم الجوال يجب أن يكون 10 أرقام يبدأ بـ 05" }, { status: 400 });
     }
     data.phone = phone || null;
   }

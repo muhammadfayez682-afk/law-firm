@@ -5,7 +5,8 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { intakeVisibilityWhere } from "@/lib/intake";
 import { checkConflictOfInterest } from "@/lib/conflictCheck";
-import { isValidSaudiPhone } from "@/lib/validators";
+import { isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -63,14 +64,19 @@ export async function POST(request: NextRequest) {
 
   const body = await request.json();
   const clientName = typeof body.clientName === "string" ? body.clientName.trim() : "";
-  const clientPhone = typeof body.clientPhone === "string" ? body.clientPhone.trim() : "";
+  const clientPhone = typeof body.clientPhone === "string" ? normalizeSaudiPhone(body.clientPhone.trim()) : "";
+  const clientIdNumber = typeof body.clientIdNumber === "string" ? body.clientIdNumber.trim() : "";
   const disputeSummary = typeof body.disputeSummary === "string" ? body.disputeSummary.trim() : "";
   const opposingParty = typeof body.opposingParty === "string" ? body.opposingParty.trim() : "";
   const source = body.source as IntakeSource;
+  const force = body.force === true;
 
   if (!clientName) return NextResponse.json({ error: "اسم العميل مطلوب" }, { status: 400 });
   if (!clientPhone || !isValidSaudiPhone(clientPhone)) {
-    return NextResponse.json({ error: "رقم جوال صحيح مطلوب (مثال: 05XXXXXXXX)" }, { status: 400 });
+    return NextResponse.json({ error: "رقم الجوال يجب أن يكون 10 أرقام يبدأ بـ 05" }, { status: 400 });
+  }
+  if (clientIdNumber && !/^\d{10}$/.test(clientIdNumber)) {
+    return NextResponse.json({ error: "رقم الهوية/السجل يجب أن يكون 10 أرقام" }, { status: 400 });
   }
   if (disputeSummary.length < 30) {
     return NextResponse.json({ error: "ملخص النزاع يجب ألا يقل عن 30 حرفًا" }, { status: 400 });
@@ -79,6 +85,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "الطرف المقابل مطلوب لفحص التعارض" }, { status: 400 });
   }
   if (!source) return NextResponse.json({ error: "مصدر القضية مطلوب" }, { status: 400 });
+
+  // فحص تكرار الجوال/الهوية (تحذير قابل للتجاوز بـ force بعد تأكيد المستخدم).
+  if (!force) {
+    const phoneDup = await checkPhoneDuplicate(clientPhone);
+    if (phoneDup.hasDuplicate) return NextResponse.json(duplicatePayload(phoneDup), { status: 409 });
+    if (clientIdNumber) {
+      const idDup = await checkIdentityDuplicate(clientIdNumber);
+      if (idDup.hasDuplicate) return NextResponse.json(duplicatePayload(idDup), { status: 409 });
+    }
+  }
 
   // فحص تعارض المصالح الآلي عند الإنشاء.
   const conflict = await checkConflictOfInterest(opposingParty);
@@ -91,7 +107,7 @@ export async function POST(request: NextRequest) {
         clientName,
         clientPhone,
         clientEmail: body.clientEmail?.trim() || null,
-        clientIdNumber: body.clientIdNumber?.trim() || null,
+        clientIdNumber: clientIdNumber || null,
         disputeSummary,
         opposingParty,
         proposedType: (body.proposedType as CaseType) || null,
@@ -114,6 +130,11 @@ export async function POST(request: NextRequest) {
       resourceId: created.id,
     },
   });
+  if (force) {
+    await prisma.intakeNote.create({
+      data: { intakeId: created.id, authorId: session.user.id, content: "حُفظ الطلب رغم تحذير تكرار (تأكيد المستخدم)." },
+    });
+  }
 
   return NextResponse.json({ ...created, conflict }, { status: 201 });
 }

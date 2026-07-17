@@ -4,7 +4,8 @@ import type { CaseStatus, ClientType, Prisma } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { clientVisibilityWhere } from "@/lib/rbac";
-import { isValidNationalIdOrCr, isValidSaudiPhone } from "@/lib/validators";
+import { isValidNationalIdOrCr, isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 
 const CLOSED_STATUSES: CaseStatus[] = ["closed", "archived"];
 
@@ -96,14 +97,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
+  const phone = typeof body.phone === "string" && body.phone.trim()
+    ? normalizeSaudiPhone(body.phone.trim())
+    : null;
+  const nationalIdOrCr = typeof body.nationalIdOrCr === "string" && body.nationalIdOrCr.trim()
+    ? body.nationalIdOrCr.trim()
+    : null;
+  const force = body.force === true;
+
+  // فحص التكرار (تحذير قابل للتجاوز بـ force بعد تأكيد المستخدم).
+  if (!force) {
+    if (phone) {
+      const dup = await checkPhoneDuplicate(phone);
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+    if (nationalIdOrCr) {
+      const dup = await checkIdentityDuplicate(nationalIdOrCr);
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+  }
+
   const created = await prisma.client.create({
     data: {
       type: body.type,
       fullName: body.fullName,
-      nationalIdOrCr: body.nationalIdOrCr || null,
+      nationalIdOrCr,
       nationality: body.nationality || null,
       representativeName: body.representativeName || null,
-      phone: body.phone || null,
+      phone,
       email: body.email || null,
       status: body.status ?? "prospect",
     },
@@ -117,6 +138,11 @@ export async function POST(request: NextRequest) {
       resourceId: created.id,
     },
   });
+  if (force && (phone || nationalIdOrCr)) {
+    await prisma.auditLog.create({
+      data: { userId: session.user.id, action: "update", resourceType: "Client", resourceId: created.id },
+    });
+  }
 
   return NextResponse.json(created, { status: 201 });
 }

@@ -5,8 +5,17 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, canEditCase } from "@/lib/rbac";
 import { PARTY_ROLE_LABELS_AR } from "@/lib/parties";
+import { isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 
 type Params = { params: Promise<{ id: string }> };
+
+/** تحقق صيغة جوال/هوية الطرف — يُعيد رسالة خطأ أو null. */
+function partyNumberError(phone?: string, identityNumber?: string): string | null {
+  if (phone && !isValidSaudiPhone(phone)) return "رقم جوال الطرف يجب أن يكون 10 أرقام يبدأ بـ 05";
+  if (identityNumber && !/^\d{10}$/.test(identityNumber)) return "رقم هوية الطرف يجب أن يكون 10 أرقام";
+  return null;
+}
 
 async function loadCase(id: string) {
   return prisma.case.findUnique({
@@ -63,13 +72,30 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
   }
 
+  const phone = body.phone?.trim() ? normalizeSaudiPhone(body.phone.trim()) : "";
+  const identityNumber = body.identityNumber?.trim() || "";
+  const numberError = partyNumberError(phone, identityNumber);
+  if (numberError) return NextResponse.json({ error: numberError }, { status: 400 });
+
+  const force = body.force === true;
+  if (!force) {
+    if (phone) {
+      const dup = await checkPhoneDuplicate(phone);
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+    if (identityNumber) {
+      const dup = await checkIdentityDuplicate(identityNumber);
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+  }
+
   const created = await prisma.caseParty.create({
     data: {
       caseId: id,
       role,
       name,
-      identityNumber: body.identityNumber?.trim() || null,
-      phone: body.phone?.trim() || null,
+      identityNumber: identityNumber || null,
+      phone: phone || null,
       address: body.address?.trim() || null,
       opposingCounsel: body.opposingCounsel?.trim() || null,
       notes: body.notes?.trim() || null,
@@ -108,13 +134,32 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "صفة غير صالحة" }, { status: 400 });
   }
 
+  const newPhone = body.phone !== undefined && body.phone?.trim()
+    ? normalizeSaudiPhone(body.phone.trim())
+    : "";
+  const newIdentity = body.identityNumber !== undefined ? body.identityNumber?.trim() || "" : "";
+  const numberError = partyNumberError(newPhone, newIdentity);
+  if (numberError) return NextResponse.json({ error: numberError }, { status: 400 });
+
+  const force = body.force === true;
+  if (!force) {
+    if (newPhone && newPhone !== party.phone) {
+      const dup = await checkPhoneDuplicate(newPhone, { excludePartyId: partyId });
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+    if (newIdentity && newIdentity !== party.identityNumber) {
+      const dup = await checkIdentityDuplicate(newIdentity, { excludePartyId: partyId });
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+  }
+
   const updated = await prisma.caseParty.update({
     where: { id: partyId },
     data: {
       role: body.role ?? undefined,
       name: typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined,
       identityNumber: body.identityNumber !== undefined ? body.identityNumber?.trim() || null : undefined,
-      phone: body.phone !== undefined ? body.phone?.trim() || null : undefined,
+      phone: body.phone !== undefined ? newPhone || null : undefined,
       address: body.address !== undefined ? body.address?.trim() || null : undefined,
       opposingCounsel:
         body.opposingCounsel !== undefined ? body.opposingCounsel?.trim() || null : undefined,

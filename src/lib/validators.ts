@@ -1,9 +1,30 @@
 // أدوات تحقق مشتركة (أرقام سعودية + قوة كلمة المرور).
 
-/** رقم الجوال السعودي: 05XXXXXXXX أو +9665XXXXXXXX أو 9665XXXXXXXX. */
-export function isValidSaudiPhone(phone: string): boolean {
+/**
+ * توحيد صيغة الجوال السعودي إلى 05XXXXXXXX:
+ * يحوّل +9665X / 9665X إلى 05X، ويحذف المسافات والشرطات.
+ * يُستخدم قبل الحفظ والمقارنة لضمان صيغة واحدة تمنع التكرار المموّه.
+ */
+export function normalizeSaudiPhone(phone: string): string {
   const cleaned = phone.replace(/[\s-]/g, "");
-  return /^(?:\+?966|0)5\d{8}$/.test(cleaned);
+  if (cleaned.startsWith("+966")) return "0" + cleaned.slice(4);
+  if (cleaned.startsWith("966")) return "0" + cleaned.slice(3);
+  return cleaned;
+}
+
+/** رقم الجوال السعودي: 10 خانات بالضبط تبدأ بـ 05 (بعد التوحيد). */
+export function isValidSaudiPhone(phone: string): boolean {
+  return /^05\d{8}$/.test(normalizeSaudiPhone(phone));
+}
+
+/** رسالة خطأ تفصيلية للجوال (للعرض الفوري تحت الحقل)، أو null إن كان صحيحًا. */
+export function saudiPhoneError(phone: string): string | null {
+  const cleaned = normalizeSaudiPhone(phone);
+  if (!cleaned) return "رقم الجوال مطلوب";
+  if (!/^\d+$/.test(cleaned)) return "رقم الجوال يجب أن يحتوي أرقامًا فقط";
+  if (!cleaned.startsWith("05")) return "رقم الجوال يجب أن يبدأ بـ 05";
+  if (cleaned.length !== 10) return "رقم الجوال يجب أن يكون 10 أرقام";
+  return null;
 }
 
 /** الهوية الوطنية (تبدأ بـ 1) أو الإقامة (تبدأ بـ 2) — 10 أرقام + خوارزمية Luhn المعدّلة. */

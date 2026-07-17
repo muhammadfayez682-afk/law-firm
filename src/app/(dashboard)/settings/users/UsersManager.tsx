@@ -7,6 +7,7 @@ import type { UserRole } from "@prisma/client";
 import { ROLE_LABELS_AR } from "@/lib/rbac";
 import { formatDualDate } from "@/lib/dateUtils";
 import { toEnglishDigits } from "@/lib/formatNumber";
+import { NumberField } from "@/components/ui/NumberField";
 
 type ManagedUser = {
   id: string;
@@ -212,10 +213,7 @@ function NewUserModal({ onClose }: { onClose: () => void }) {
             <label className={labelClass}>البريد الإلكتروني</label>
             <input name="email" type="email" required className={inputClass} dir="ltr" />
           </div>
-          <div>
-            <label className={labelClass}>الجوال</label>
-            <input name="phone" className={inputClass} dir="ltr" />
-          </div>
+          <NumberField name="phone" label="الجوال" variant="phone" placeholder="05XXXXXXXX" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -286,10 +284,7 @@ function EditUserModal({ user, onClose }: { user: ManagedUser; onClose: () => vo
           <input name="fullName" defaultValue={user.fullName} required className={inputClass} />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>الجوال</label>
-            <input name="phone" defaultValue={user.phone ?? ""} className={inputClass} dir="ltr" />
-          </div>
+          <NumberField name="phone" label="الجوال" variant="phone" defaultValue={user.phone ?? ""} placeholder="05XXXXXXXX" />
           <div>
             <label className={labelClass}>الدور</label>
             <select name="role" defaultValue={user.role} className={inputClass}>

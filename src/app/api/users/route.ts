@@ -5,7 +5,7 @@ import type { UserRole } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageUsers } from "@/lib/rbac";
-import { isValidSaudiPhone } from "@/lib/validators";
+import { isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
 
 const VALID_ROLES: UserRole[] = [
   "system_admin",
@@ -79,9 +79,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "الدور مطلوب" }, { status: 400 });
   }
 
-  const phone = typeof body.phone === "string" ? body.phone.trim() : "";
+  const phone = typeof body.phone === "string" && body.phone.trim() ? normalizeSaudiPhone(body.phone.trim()) : "";
   if (phone && !isValidSaudiPhone(phone)) {
-    return NextResponse.json({ error: "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)" }, { status: 400 });
+    return NextResponse.json({ error: "رقم الجوال يجب أن يكون 10 أرقام يبدأ بـ 05" }, { status: 400 });
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     data: {
       fullName,
       email,
-      phone: typeof body.phone === "string" && body.phone.trim() ? body.phone.trim() : null,
+      phone: phone || null,
       role,
       password: passwordHash,
     },

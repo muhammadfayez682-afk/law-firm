@@ -10,7 +10,14 @@ import {
   isValidAgencyNumber,
   isValidNationalIdOrCr,
   isValidSaudiPhone,
+  normalizeSaudiPhone,
 } from "@/lib/validators";
+import {
+  checkAgencyDuplicate,
+  checkIdentityDuplicate,
+  checkPhoneDuplicate,
+  duplicatePayload,
+} from "@/lib/duplicateCheck";
 import type { CaseType, PartyRole } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -122,6 +129,26 @@ export async function POST(request: NextRequest) {
   }
   if (agency?.agencyNumber && !isValidAgencyNumber(agency.agencyNumber.trim())) {
     return NextResponse.json({ error: "رقم الوكالة غير صحيح (6-15 رقمًا)" }, { status: 400 });
+  }
+
+  // توحيد جوال العميل الجديد + فحص التكرار (جوال/هوية/وكالة) قبل الإنشاء.
+  const force = body.force === true;
+  if (newClient?.phone) {
+    newClient.phone = normalizeSaudiPhone(newClient.phone.trim());
+  }
+  if (!force) {
+    if (newClient?.phone) {
+      const dup = await checkPhoneDuplicate(newClient.phone);
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+    if (newClient?.nationalIdOrCr?.trim()) {
+      const dup = await checkIdentityDuplicate(newClient.nationalIdOrCr.trim());
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+    if (agency?.agencyNumber?.trim()) {
+      const dup = await checkAgencyDuplicate(agency.agencyNumber.trim());
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
   }
 
   const clientPartyRole = body.clientPartyRole as PartyRole | undefined;

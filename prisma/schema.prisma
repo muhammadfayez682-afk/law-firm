@@ -82,6 +82,10 @@ model Client {
   caseParties        CaseParty[]
   invoices           Invoice[]
 
+  // فهرس (غير فريد) لتسريع فحص تكرار الجوال. لا نجعله فريدًا لأن النظام
+  // يسمح بتسجيل مكرر بعد تأكيد المستخدم (زر «متابعة الحفظ»). التفرّد على
+  // nationalIdOrCr مضمون أصلًا عبر @unique أعلاه.
+  @@index([phone])
   @@map("clients")
 }
 
@@ -212,6 +216,8 @@ model CaseParty {
   linkedClientId  String?
   notes           String?
 
+  @@index([phone])
+  @@index([identityNumber])
   @@map("case_parties")
 }
 
@@ -669,6 +675,7 @@ model IntakeRequest {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
+  @@index([clientPhone])
   @@map("intake_requests")
 }
 

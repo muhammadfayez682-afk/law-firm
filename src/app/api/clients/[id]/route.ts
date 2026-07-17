@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessClient } from "@/lib/rbac";
-import { isValidNationalIdOrCr, isValidSaudiPhone } from "@/lib/validators";
+import { isValidNationalIdOrCr, isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -68,9 +69,22 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       { status: 400 }
     );
   }
-  const phoneValue = typeof body.phone === "string" ? body.phone.trim() : "";
+  const phoneValue = typeof body.phone === "string" ? normalizeSaudiPhone(body.phone.trim()) : "";
   if (phoneValue && !isValidSaudiPhone(phoneValue)) {
-    return NextResponse.json({ error: "رقم الجوال غير صحيح (مثال: 05XXXXXXXX)" }, { status: 400 });
+    return NextResponse.json({ error: "رقم الجوال يجب أن يكون 10 أرقام يبدأ بـ 05" }, { status: 400 });
+  }
+
+  const force = body.force === true;
+  // فحص التكرار مع استثناء السجل نفسه (excludeClientId).
+  if (!force) {
+    if (phoneValue && phoneValue !== existing.phone) {
+      const dup = await checkPhoneDuplicate(phoneValue, { excludeClientId: id });
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
+    if (idValue && idValue !== existing.nationalIdOrCr) {
+      const dup = await checkIdentityDuplicate(idValue, { excludeClientId: id });
+      if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
+    }
   }
 
   const updated = await prisma.client.update({
@@ -80,7 +94,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       nationalIdOrCr: body.nationalIdOrCr ?? undefined,
       nationality: body.nationality ?? undefined,
       representativeName: body.representativeName ?? undefined,
-      phone: body.phone ?? undefined,
+      phone: body.phone !== undefined ? phoneValue || null : undefined,
       email: body.email ?? undefined,
       status: body.status ?? undefined,
     },

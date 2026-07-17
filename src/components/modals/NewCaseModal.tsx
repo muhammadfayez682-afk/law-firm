@@ -9,6 +9,9 @@ import {
   OPPOSING_ROLE,
   PARTY_ROLE_LABELS_AR,
 } from "@/lib/parties";
+import { NumberField } from "@/components/ui/NumberField";
+import { DuplicateWarningModal } from "@/components/modals/DuplicateWarningModal";
+import type { DuplicateMatch, DuplicateType } from "@/lib/duplicateCheck";
 
 const CASE_TYPE_OPTIONS: { value: CaseType; label: string }[] = [
   { value: "general", label: "عام" },
@@ -51,6 +54,8 @@ export function NewCaseModal({
   const [clientMode, setClientMode] = useState<"existing" | "new">("existing");
   const [clientType, setClientType] = useState<"individual" | "company">("individual");
   const [conflictConfirmed, setConflictConfirmed] = useState(false);
+  const [dup, setDup] = useState<{ type: DuplicateType; value: string; existingIn: DuplicateMatch[] } | null>(null);
+  const [pending, setPending] = useState<Record<string, unknown> | null>(null);
 
   const [allStages, setAllStages] = useState<CaseFlowStage[]>([]);
   const [selectedCaseType, setSelectedCaseType] = useState<string>("");
@@ -179,15 +184,25 @@ export function NewCaseModal({
         : {}),
     };
 
+    await submit(payload);
+  }
+
+  async function submit(payload: Record<string, unknown>) {
+    setLoading(true);
     try {
       const res = await fetch("/api/cases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      const data = await res.json().catch(() => null);
 
+      if (res.status === 409 && data?.error === "duplicate_detected") {
+        setDup({ type: data.duplicateInfo.type, value: "", existingIn: data.duplicateInfo.existingIn });
+        setPending(payload);
+        return;
+      }
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
         const message = data?.error ?? "تعذّر إنشاء القضية.";
         setError(message);
         toast.error(message);
@@ -302,10 +317,7 @@ export function NewCaseModal({
                 <div className="grid grid-cols-2 gap-4">
                   {clientType === "individual" ? (
                     <>
-                      <div>
-                        <label className={labelClass}>رقم الهوية</label>
-                        <input name="newClientNationalIdOrCr" className={inputClass} />
-                      </div>
+                      <NumberField name="newClientNationalIdOrCr" label="رقم الهوية" variant="saudi_id" placeholder="1XXXXXXXXX" />
                       <div>
                         <label className={labelClass}>الجنسية</label>
                         <input name="newClientNationality" className={inputClass} />
@@ -313,10 +325,7 @@ export function NewCaseModal({
                     </>
                   ) : (
                     <>
-                      <div>
-                        <label className={labelClass}>رقم السجل التجاري</label>
-                        <input name="newClientNationalIdOrCr" className={inputClass} />
-                      </div>
+                      <NumberField name="newClientNationalIdOrCr" label="رقم السجل التجاري" variant="cr" placeholder="XXXXXXXXXX" />
                       <div>
                         <label className={labelClass}>اسم الممثل</label>
                         <input name="newClientRepresentativeName" className={inputClass} />
@@ -326,10 +335,7 @@ export function NewCaseModal({
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className={labelClass}>الجوال</label>
-                    <input name="newClientPhone" className={inputClass} dir="ltr" />
-                  </div>
+                  <NumberField name="newClientPhone" label="الجوال" variant="phone" placeholder="05XXXXXXXX" />
                   <div>
                     <label className={labelClass}>البريد الإلكتروني</label>
                     <input name="newClientEmail" type="email" className={inputClass} dir="ltr" />
@@ -344,8 +350,7 @@ export function NewCaseModal({
             <h3 className={sectionTitleClass}>2. الوكالة (اختياري)</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>رقم الوكالة</label>
-                <input name="agencyNumber" className={inputClass} dir="ltr" />
+                <NumberField name="agencyNumber" label="رقم الوكالة" variant="agency" />
                 {fieldErrors.agencyNumber && (
                   <p className="mt-1 text-xs text-red-600">{fieldErrors.agencyNumber}</p>
                 )}
@@ -542,7 +547,9 @@ export function NewCaseModal({
                       <label className={labelClass}>رقم الهوية / السجل</label>
                       <input
                         value={party.identityNumber}
-                        onChange={(e) => updateOpposing(index, "identityNumber", e.target.value)}
+                        onChange={(e) => updateOpposing(index, "identityNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        inputMode="numeric"
+                        maxLength={10}
                         className={inputClass}
                         dir="ltr"
                       />
@@ -624,6 +631,20 @@ export function NewCaseModal({
           </div>
         </form>
       </div>
+
+      {dup && (
+        <DuplicateWarningModal
+          type={dup.type}
+          value={dup.value}
+          existingIn={dup.existingIn}
+          busy={loading}
+          onContinue={() => {
+            setDup(null);
+            if (pending) submit({ ...pending, force: true });
+          }}
+          onCancel={() => setDup(null)}
+        />
+      )}
     </div>
   );
 }
