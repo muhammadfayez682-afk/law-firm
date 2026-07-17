@@ -4,6 +4,7 @@ export type AutofillKey =
   | "agencyNumber"
   | "clientPhone"
   | "caseNumber"
+  | "primaryCaseNumber"
   | "caseTitle"
   | "lawyerName"
   | "dateHijriGregorian"
@@ -198,7 +199,7 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
     items: [
       { kind: "field", key: "date", label: "التاريخ", type: "text", autofill: "dateHijriGregorian" },
       { kind: "field", key: "clientName", label: "أسم العميل", type: "text", autofill: "clientName" },
-      { kind: "field", key: "caseNumber", label: "رقم القضية", type: "text", autofill: "caseNumber" },
+      { kind: "field", key: "caseNumber", label: "رقم القضية", type: "text", autofill: "primaryCaseNumber" },
       { kind: "field", key: "procedureType", label: "نوع الإجراء المتخذ", type: "textarea" },
       { kind: "field", key: "explanation", label: "الشرح", type: "textarea" },
       { kind: "field", key: "preparedBy", label: "معد المحضر", type: "text", autofill: "lawyerName" },

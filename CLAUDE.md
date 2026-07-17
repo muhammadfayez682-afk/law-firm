@@ -87,6 +87,15 @@ src/
 - الشريط الجانبي (`Sidebar`) يبني مجموعاته من `role` عبر دوال `rbac` مباشرة، فلا تظهر روابط لا يملك الدور صلاحيتها.
 - الحسابات تُعطَّل تعطيلًا ناعمًا (`User.isActive`) ولا تُحذف — الحساب المعطّل يُمنع من تسجيل الدخول في `auth.ts`، مع حماية بقاء **مسؤول نظام** نشط واحد على الأقل وعدم تعطيل الذات.
 
+### رقم القضية الرسمي كمرجع أساسي — `src/lib/caseNumber.ts` + `Case.displayNumber`
+- **الأولوية في العرض**: `courtCaseNumber` (رقم المحكمة الرسمي) ← رقم منصة التسوية (`amicableSettlement.requestNumber` قوى/تراضي) ← `internalNumber` (الرقم الداخلي، احتياطي). المنطق موحّد في `getPrimaryCaseNumber`/`getAllCaseNumbers`/`computeDisplayNumber` (ملف نقيّ يُستورد في الواجهة أيضًا).
+- **`courtCaseNumber` بلا validation صارم**: يقبل أي تنسيق (أرقام/حروف/رموز/شرطات) لتعدّد أشكال أرقام المحاكم — مثال: `4568/ي-1447` أو `44567890`.
+- **`Case.displayNumber` حقل مُحسَّب مسبقًا** (نسخة مخزّنة من الرقم المفضّل) للاستعلام/العرض السريع. **يُزامَن عند الكتابة فقط** عبر `syncCaseDisplayNumber` في `src/lib/caseNumber.server.ts` (يقبل عميل Prisma أو `tx`): يُضبط = `internalNumber` عند إنشاء القضية (POST `/api/cases` + تفعيل الاستلام)، ويُعاد حسابه عند تعديل `courtCaseNumber` (PATCH `/api/cases/[id]`) أو إضافة/تعديل رقم قوى/تراضي (POST/PATCH `amicable-settlement`).
+- **⚠️ لا يوجد Prisma middleware**: Prisma 7 أزال `prisma.$use` (تحقّقنا: `undefined`؛ `$extends` فقط المتاح). لذلك المزامنة **صريحة عند مواضع الكتابة** لا عبر middleware — وهو أيضًا أنظف وأكثر حتمية ويتجنّب استعلامًا إضافيًا في كل قراءة.
+- **البحث بأي رقم**: `buildCasesWhere` (قائمة القضايا) يبحث في `internalNumber` + `courtCaseNumber` + `amicableSettlement.requestNumber` + العنوان + اسم العميل — فالمحامي يجد القضية بأي رقم يعرفه.
+- **العرض**: مكوّن `CaseNumberDisplay` (`inline`/`card`/`detailed`) — شارة لونية حسب المصدر (محكمة أخضر · قوى/تراضي أزرق · داخلي رمادي)، أرقام إنجليزية دائمًا (`toEnglishDigits`, `dir="ltr"`). مستخدم في قائمة القضايا (عمود «الرقم») وصفحة التفاصيل (رقم رسمي بارز أعلى العنوان + بطاقة «أرقام القضية» بالجدول التفصيلي + بانر «لم يُضَف رقم المحكمة» + `EditCourtNumberModal`). النماذج: مفتاح autofill جديد `primaryCaseNumber` لحقول «رقم القضية» العامة (بينما «رقم ملف العميل» يبقى `internalNumber` و«رقم الدعوى» في تقرير الجلسة يبقى `courtCaseNumber`).
+- **seed**: توزيع يغطي كل المصادر — قضيتان برقم محكمة (`4568/ي-1447`, `10247/ب-1446`)، قضيتان عماليتان برقم قوى فقط، وقضيتان بالرقم الداخلي فقط (لم تُرفع بعد). حلقة backfill في نهاية `seed.ts` تضبط `displayNumber` لكل القضايا بشكل idempotent.
+
 ### نظام اعتماد المذكرات (LegalMemo) — `src/lib/memos.ts`
 - سير عمل فعلي: المشرف+المحامي يحددون التوجه ← **الباحث** يكتب المذكرة (مسودة) ← يرسلها (`submitted`) ← **المحامي** يراجع فيعتمد (`approved`) أو يطلب تعديلات (`changes_requested`، والملاحظات إلزامية) ← بعد الاعتماد يحدّدها المحامي `submitted_to_court`.
 - قيود الحالة مفروضة في الـ API: الباحث لا يعدّل إلا وهي `draft` أو `changes_requested` (`canEditMemo`)؛ المراجعة (`canReviewMemo`) للمحامي فقط والمذكرة `submitted`؛ التقديم للمحكمة فقط بعد `approved`. كل مراجعة تُسجَّل في `MemoReview` مع ملاحظات المحامي وتاريخها.

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canCreateCase, CASE_HANDLER_ROLES } from "@/lib/rbac";
 import { buildCasesWhere, CASES_PAGE_SIZE } from "@/lib/case-filters";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
+import { CaseNumberDisplay } from "@/components/cases/CaseNumberDisplay";
 import { CasesToolbar } from "./CasesToolbar";
 import { CasesPagination } from "./CasesPagination";
 import { formatDualDate } from "@/lib/dateUtils";
@@ -55,7 +56,11 @@ export default async function CasesPage({
       orderBy: { updatedAt: "desc" },
       skip: (page - 1) * CASES_PAGE_SIZE,
       take: CASES_PAGE_SIZE,
-      include: { client: true, responsibleLawyer: true },
+      include: {
+        client: true,
+        responsibleLawyer: true,
+        amicableSettlement: { select: { requestNumber: true, platform: true } },
+      },
     }),
     prisma.case.count({ where }),
     prisma.client.findMany({ orderBy: { fullName: "asc" } }),
@@ -83,8 +88,9 @@ export default async function CasesPage({
       />
 
       <div className="overflow-hidden rounded-xl border border-black/5 bg-white shadow-sm">
-        <div className="hidden grid-cols-7 gap-4 border-b border-black/5 bg-navy/5 px-5 py-3 text-xs font-medium text-foreground/50 sm:grid">
+        <div className="hidden grid-cols-8 gap-4 border-b border-black/5 bg-navy/5 px-5 py-3 text-xs font-medium text-foreground/50 sm:grid">
           <span>عنوان القضية</span>
+          <span>الرقم</span>
           <span>العميل</span>
           <span>النوع</span>
           <span>صفتنا</span>
@@ -98,9 +104,12 @@ export default async function CasesPage({
             <Link
               key={c.id}
               href={`/cases/${c.id}`}
-              className="grid grid-cols-1 gap-1 px-5 py-3 text-sm transition-colors hover:bg-navy/5 sm:grid-cols-7 sm:items-center sm:gap-4"
+              className="grid grid-cols-1 gap-1 px-5 py-3 text-sm transition-colors hover:bg-navy/5 sm:grid-cols-8 sm:items-center sm:gap-4"
             >
               <span className="truncate font-medium text-navy">{c.title}</span>
+              <span className="min-w-0">
+                <CaseNumberDisplay case={c} variant="inline" />
+              </span>
               <span className="truncate text-foreground/70">{c.client.fullName}</span>
               <span className="text-foreground/70">
                 {CASE_TYPE_LABELS_AR[c.caseType] ?? c.caseType}

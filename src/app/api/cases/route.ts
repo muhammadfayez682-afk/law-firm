@@ -239,6 +239,8 @@ export async function POST(request: NextRequest) {
       return tx.case.create({
         data: {
           internalNumber,
+          // عند الإنشاء لا يوجد رقم محكمة ولا رقم تسوية بعد، فالرقم المعروض = الداخلي.
+          displayNumber: internalNumber,
           title: body.title,
           caseType,
           courtName: body.courtName || null,

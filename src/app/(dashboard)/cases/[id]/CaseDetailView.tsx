@@ -26,6 +26,8 @@ import { ScheduleSessionModal } from "@/components/modals/ScheduleSessionModal";
 import { UploadDocumentModal } from "@/components/modals/UploadDocumentModal";
 import { CaseClosureModal } from "@/components/modals/CaseClosureModal";
 import { NewTaskModal } from "@/components/modals/NewTaskModal";
+import { EditCourtNumberModal } from "@/components/modals/EditCourtNumberModal";
+import { CaseNumberDisplay } from "@/components/cases/CaseNumberDisplay";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
 import { MEMO_STATUS_LABELS_AR, MEMO_STATUS_STYLES } from "@/lib/memos";
@@ -159,6 +161,7 @@ export function CaseDetailView({
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showClosureModal, setShowClosureModal] = useState(false);
   const [showNewTask, setShowNewTask] = useState(false);
+  const [showCourtNumberModal, setShowCourtNumberModal] = useState(false);
 
   const canRequestClosure =
     caseData.responsibleLawyerId === currentUserId && canTransitionToPendingClosure(caseData.status);
@@ -189,7 +192,9 @@ export function CaseDetailView({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs text-foreground/50">{caseData.internalNumber}</p>
+          <div className="mb-1">
+            <CaseNumberDisplay case={caseData} variant="inline" />
+          </div>
           <h1 className="font-amiri text-2xl font-bold text-navy">{caseData.title}</h1>
           {ourParty && (
             <p className="mt-1 text-sm">
@@ -270,6 +275,39 @@ export function CaseDetailView({
           </div>
         ))}
       </div>
+
+      {/* بانر تنبيه: لم يُضَف رقم المحكمة الرسمي بعد */}
+      {canEdit && !caseData.courtCaseNumber && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <p className="text-sm font-medium text-amber-800">
+            ⚠️ لم يُضَف رقم القضية الرسمي (من المحكمة) بعد
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowCourtNumberModal(true)}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            إضافة رقم المحكمة
+          </button>
+        </div>
+      )}
+
+      {/* بطاقة أرقام القضية */}
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold text-navy">أرقام القضية</h2>
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => setShowCourtNumberModal(true)}
+              className="rounded-lg border border-navy/20 px-3 py-1.5 text-xs font-medium text-navy hover:bg-navy/5"
+            >
+              {caseData.courtCaseNumber ? "تعديل رقم المحكمة" : "إضافة رقم المحكمة"}
+            </button>
+          )}
+        </div>
+        <CaseNumberDisplay case={caseData} variant="detailed" />
+      </section>
 
       {/* بطاقة أطراف الدعوى البارزة */}
       <section>
@@ -629,6 +667,13 @@ export function CaseDetailView({
           presetCaseId={caseData.id}
           currentUserId={currentUserId}
           onClose={() => setShowNewTask(false)}
+        />
+      )}
+      {showCourtNumberModal && (
+        <EditCourtNumberModal
+          caseId={caseData.id}
+          currentValue={caseData.courtCaseNumber}
+          onClose={() => setShowCourtNumberModal(false)}
         />
       )}
     </div>

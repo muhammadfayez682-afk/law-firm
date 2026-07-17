@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, canEditCase } from "@/lib/rbac";
 import { computeDeadlineDate, getAmicableSettlementPlatform, getFirstStage } from "@/lib/caseFlow";
+import { syncCaseDisplayNumber } from "@/lib/caseNumber.server";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -83,6 +84,9 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
   });
 
+  // إن رافق سجل التسوية رقم قوى/تراضي، قد يصبح هو الرقم المعروض (ما لم يوجد رقم محكمة).
+  await syncCaseDisplayNumber(prisma, id);
+
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,
@@ -139,6 +143,11 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   } else if (body.outcome === "pending") {
     // إعادة الحالة إلى قيد التسوية الودية.
     await prisma.case.update({ where: { id }, data: { status: "amicable_settlement" } });
+  }
+
+  // إعادة حساب الرقم المعروض عند تغيّر رقم قوى/تراضي.
+  if (body.requestNumber !== undefined) {
+    await syncCaseDisplayNumber(prisma, id);
   }
 
   await prisma.auditLog.create({

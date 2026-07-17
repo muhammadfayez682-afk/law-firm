@@ -90,7 +90,7 @@ async function main() {
     update: {},
     create: {
       internalNumber: "MZN-2026-0001",
-      courtCaseNumber: "44512300",
+      courtCaseNumber: "4568/ي-1447",
       title: "نزاع تجاري - إخلال بعقد مقاولة",
       caseType: "commercial",
       courtName: "المحكمة التجارية بالرياض",
@@ -214,6 +214,7 @@ async function main() {
     update: {},
     create: {
       internalNumber: "MZN-2026-0003",
+      courtCaseNumber: "10247/ب-1446",
       title: "أحوال شخصية - دعوى نفقة",
       caseType: "personal_status",
       courtName: "محكمة الأحوال الشخصية بالدمام",
@@ -235,6 +236,99 @@ async function main() {
           { userId: yazid.id, roleInCase: "researcher" },
         ],
       },
+    },
+  });
+
+  // قضية عمالية ثانية — رقم قوى فقط (لم يُضَف رقم محكمة بعد).
+  const laborCaseTwo = await prisma.case.upsert({
+    where: { internalNumber: "MZN-2026-0006" },
+    update: {},
+    create: {
+      internalNumber: "MZN-2026-0006",
+      title: "قضية عمالية - أجور متأخرة",
+      caseType: "labor",
+      courtName: "المحكمة العمالية بالرياض",
+      claimValue: 62000,
+      clientId: individualClient.id,
+      status: "amicable_settlement",
+      responsibleLawyerId: omar.id,
+      priority: "normal",
+      conflictCheckConfirmed: true,
+      notes: "مطالبة بأجور متأخرة عن ثلاثة أشهر، منظورة عبر منصة قوى.",
+      parties: {
+        create: [
+          { role: "plaintiff", name: "عبدالله بن سعيد الحربي", isOurClient: true, linkedClientId: individualClient.id },
+          { role: "defendant", name: "شركة الإنشاءات المتقدمة", isOurClient: false },
+        ],
+      },
+      clientPartyRole: "plaintiff",
+      team: {
+        create: [
+          { userId: anas.id, roleInCase: "supervisor" },
+          { userId: omar.id, roleInCase: "lawyer" },
+        ],
+      },
+    },
+  });
+
+  await prisma.amicableSettlement.upsert({
+    where: { caseId: laborCaseTwo.id },
+    update: {},
+    create: {
+      caseId: laborCaseTwo.id,
+      platform: "qiwa",
+      isMandatory: true,
+      requestNumber: "QIWA-778452",
+      firstSessionDate: new Date("2026-08-20T10:00:00.000Z"),
+      deadlineDate: new Date("2026-08-30T00:00:00.000Z"),
+      outcome: "pending",
+    },
+  });
+
+  // قضيتان بالرقم الداخلي فقط — لم تُرفع للمحكمة ولا تسوية بعد.
+  await prisma.case.upsert({
+    where: { internalNumber: "MZN-2026-0007" },
+    update: {},
+    create: {
+      internalNumber: "MZN-2026-0007",
+      title: "استشارة تجارية - مراجعة عقد توريد",
+      caseType: "commercial",
+      clientId: companyClientOne.id,
+      status: "intake",
+      responsibleLawyerId: sahar.id,
+      priority: "normal",
+      conflictCheckConfirmed: true,
+      notes: "قيد الدراسة الأولية، لم تُرفع الدعوى بعد.",
+      clientPartyRole: "plaintiff",
+      parties: {
+        create: [
+          { role: "plaintiff", name: "شركة الأفق للمقاولات", isOurClient: true, linkedClientId: companyClientOne.id },
+        ],
+      },
+      team: { create: [{ userId: sahar.id, roleInCase: "lawyer" }] },
+    },
+  });
+
+  await prisma.case.upsert({
+    where: { internalNumber: "MZN-2026-0008" },
+    update: {},
+    create: {
+      internalNumber: "MZN-2026-0008",
+      title: "نزاع مدني - مطالبة بتعويض",
+      caseType: "general",
+      clientId: individualClient.id,
+      status: "open",
+      responsibleLawyerId: lamia.id,
+      priority: "normal",
+      conflictCheckConfirmed: true,
+      notes: "تحت الإعداد، لم يصدر رقم محكمة بعد.",
+      clientPartyRole: "plaintiff",
+      parties: {
+        create: [
+          { role: "plaintiff", name: "عبدالله بن سعيد الحربي", isOurClient: true, linkedClientId: individualClient.id },
+        ],
+      },
+      team: { create: [{ userId: lamia.id, roleInCase: "lawyer" }] },
     },
   });
 
@@ -756,6 +850,21 @@ async function main() {
     const existing = await prisma.task.findUnique({ where: { taskNumber: t.taskNumber } });
     if (!existing) {
       await prisma.task.create({ data: t });
+    }
+  }
+
+  // احتساب displayNumber لكل القضايا (المحكمة ← قوى/تراضي ← الداخلي) بشكل
+  // idempotent — يضمن ضبط الحقل حتى للصفوف الموجودة مسبقًا (upsert update:{}).
+  const allCases = await prisma.case.findMany({
+    include: { amicableSettlement: { select: { requestNumber: true } } },
+  });
+  for (const c of allCases) {
+    const displayNumber =
+      c.courtCaseNumber?.trim() ||
+      c.amicableSettlement?.requestNumber?.trim() ||
+      c.internalNumber;
+    if (displayNumber !== c.displayNumber) {
+      await prisma.case.update({ where: { id: c.id }, data: { displayNumber } });
     }
   }
 

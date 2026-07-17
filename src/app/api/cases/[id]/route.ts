@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, canEditCase, isManagement } from "@/lib/rbac";
 import { canProceedToCourt } from "@/lib/caseFlow";
+import { syncCaseDisplayNumber } from "@/lib/caseNumber.server";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -110,6 +111,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       : {},
     include: { client: true, responsibleLawyer: true, amicableSettlement: true },
   });
+
+  // إعادة حساب الرقم المعروض عند تغيّر رقم المحكمة (يتحوّل الرقم للرسمي، أو يعود
+  // للتسوية/الداخلي إن أُزيل).
+  if (courtCaseNumber !== undefined) {
+    const displayNumber = await syncCaseDisplayNumber(prisma, id);
+    if (displayNumber !== null) updated.displayNumber = displayNumber;
+  }
 
   await prisma.auditLog.create({
     data: {

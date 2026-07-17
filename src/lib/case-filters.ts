@@ -20,9 +20,12 @@ export function buildCasesWhere(user: SessionUser, filters: CaseFilters): Prisma
     ...(lawyerId ? { responsibleLawyerId: lawyerId } : {}),
     ...(q
       ? {
+          // البحث بأي رقم يعرفه المحامي: الداخلي، رقم المحكمة، أو رقم قوى/تراضي.
           OR: [
             { title: { contains: q, mode: "insensitive" as const } },
             { internalNumber: { contains: q, mode: "insensitive" as const } },
+            { courtCaseNumber: { contains: q, mode: "insensitive" as const } },
+            { amicableSettlement: { requestNumber: { contains: q, mode: "insensitive" as const } } },
             { client: { fullName: { contains: q, mode: "insensitive" as const } } },
           ],
         }

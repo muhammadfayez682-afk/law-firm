@@ -155,6 +155,7 @@ model Case {
   id                     String                  @id @default(uuid())
   internalNumber         String                  @unique
   courtCaseNumber        String?
+  displayNumber          String? // يُحدَّث تلقائيًا: courtCaseNumber ?? settlementNumber ?? internalNumber
   title                  String
   caseType               CaseType
   courtName              String?

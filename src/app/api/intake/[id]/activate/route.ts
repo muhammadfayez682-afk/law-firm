@@ -89,6 +89,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       const newCase = await tx.case.create({
         data: {
           internalNumber,
+          // عند التفعيل لا يوجد رقم محكمة ولا رقم تسوية بعد، فالرقم المعروض = الداخلي.
+          displayNumber: internalNumber,
           title,
           caseType,
           clientId,

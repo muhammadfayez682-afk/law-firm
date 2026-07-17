@@ -112,6 +112,8 @@ export default async function TemplateFillPage({
     autofillValues.clientPhone = selectedCase.client.phone ?? "";
     autofillValues.agencyNumber = selectedCase.client.agencies[0]?.agencyNumber ?? "";
     autofillValues.caseNumber = selectedCase.internalNumber;
+    // الرقم الرسمي المفضّل (المحكمة ← التسوية ← الداخلي) للحقول العامة "رقم القضية".
+    autofillValues.primaryCaseNumber = selectedCase.displayNumber ?? selectedCase.internalNumber;
     autofillValues.caseTitle = selectedCase.title;
     autofillValues.courtName = selectedCase.courtName ?? "";
     autofillValues.courtCaseNumber = selectedCase.courtCaseNumber ?? "";
