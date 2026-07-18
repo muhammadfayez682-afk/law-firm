@@ -12,6 +12,7 @@ export type SchedulerResults = {
   settlementAlerts: number;
   taskAlerts: number;
   invoiceAlerts: number;
+  pendingAgencyAlerts: number;
 };
 
 /**
@@ -63,6 +64,7 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
     settlementAlerts: 0,
     taskAlerts: 0,
     invoiceAlerts: 0,
+    pendingAgencyAlerts: 0,
   };
   const now = Date.now();
 
@@ -216,5 +218,66 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
     }
   }
 
+  // ===== 6. القضايا قيد إصدار الوكالة (تنبيهات متدرجة 3/7/14 يومًا) =====
+  results.pendingAgencyAlerts = await checkPendingAgencyCases();
+
   return results;
+}
+
+/**
+ * تنبيهات متدرّجة للقضايا التي فُعّلت بلا وكالة (status = pending_agency):
+ *  - ≥ 3 أيام: تذكير للمحامي المسؤول.
+ *  - ≥ 7 أيام: تنبيه مهم لكل فريق القضية.
+ *  - ≥ 14 يومًا: تنبيه عاجل لمسؤولي النظام.
+ * نستخدم نطاقات (≥) لا يومًا محددًا حتى لا يفوت التنبيه إن لم يُشغَّل الكرون ذلك اليوم،
+ * مع منع التكرار عبر نافذة dedup (7 أيام) لكل مرحلة.
+ */
+export async function checkPendingAgencyCases(): Promise<number> {
+  const now = Date.now();
+  const cases = await prisma.case.findMany({
+    where: { status: "pending_agency" },
+    include: { team: true },
+  });
+  const adminIds = await getUserIdsByRoles(["system_admin"]);
+
+  let count = 0;
+  for (const c of cases) {
+    const daysSince = Math.floor((now - new Date(c.openDate).getTime()) / DAY);
+    const caseNo = c.displayNumber ?? c.internalNumber;
+
+    if (daysSince >= 14) {
+      for (const rid of adminIds) {
+        const sent = await notifyOnce(rid, "agency_delayed", c.id, 7 * DAY, {
+          priority: "urgent",
+          title: "قضية متأخرة الوكالة أسبوعين",
+          message: `القضية ${caseNo} — مرّ ${daysSince} يومًا على التفعيل بلا وكالة.`,
+          actionUrl: `/cases/${c.id}`,
+          resourceType: "Case",
+        });
+        if (sent) count++;
+      }
+    } else if (daysSince >= 7) {
+      const teamIds = [c.responsibleLawyerId, ...c.team.map((m) => m.userId)];
+      for (const rid of new Set(teamIds)) {
+        const sent = await notifyOnce(rid, "agency_pending_urgent", c.id, 7 * DAY, {
+          priority: "high",
+          title: "مطلوب متابعة الموكل للوكالة",
+          message: `مرّ أسبوع على تفعيل القضية ${caseNo} بلا وكالة.`,
+          actionUrl: `/cases/${c.id}`,
+          resourceType: "Case",
+        });
+        if (sent) count++;
+      }
+    } else if (daysSince >= 3) {
+      const sent = await notifyOnce(c.responsibleLawyerId, "agency_pending_reminder", c.id, 7 * DAY, {
+        priority: "normal",
+        title: "الوكالة لم تصدر بعد",
+        message: `مرّت ${daysSince} أيام على تفعيل القضية ${caseNo} بلا وكالة.`,
+        actionUrl: `/cases/${c.id}`,
+        resourceType: "Case",
+      });
+      if (sent) count++;
+    }
+  }
+  return count;
 }

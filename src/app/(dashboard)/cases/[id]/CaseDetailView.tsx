@@ -27,6 +27,7 @@ import { UploadDocumentModal } from "@/components/modals/UploadDocumentModal";
 import { CaseClosureModal } from "@/components/modals/CaseClosureModal";
 import { NewTaskModal } from "@/components/modals/NewTaskModal";
 import { EditCourtNumberModal } from "@/components/modals/EditCourtNumberModal";
+import { AddAgencyModal } from "@/components/modals/AddAgencyModal";
 import { CaseNumberDisplay } from "@/components/cases/CaseNumberDisplay";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
@@ -162,9 +163,15 @@ export function CaseDetailView({
   const [showClosureModal, setShowClosureModal] = useState(false);
   const [showNewTask, setShowNewTask] = useState(false);
   const [showCourtNumberModal, setShowCourtNumberModal] = useState(false);
+  const [showAddAgency, setShowAddAgency] = useState(false);
 
   const canRequestClosure =
     caseData.responsibleLawyerId === currentUserId && canTransitionToPendingClosure(caseData.status);
+
+  const isPendingAgency = caseData.status === "pending_agency";
+  const daysSincePending = Math.floor(
+    (Date.now() - new Date(caseData.openDate).getTime()) / (24 * 60 * 60 * 1000)
+  );
 
   const now = new Date();
   const nextSession = caseData.sessions.find((s) => new Date(s.sessionDate) >= now) ?? null;
@@ -265,6 +272,36 @@ export function CaseDetailView({
           approvedByName={caseData.closureRequest?.approvedBy?.fullName ?? null}
           isSystemAdmin={isSystemAdmin}
         />
+      )}
+
+      {/* بانر: القضية قيد إصدار الوكالة */}
+      {isPendingAgency && (
+        <div className="rounded-xl border-2 border-yellow-300 bg-yellow-50 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="flex items-center gap-2 font-semibold text-yellow-900">
+                ⏳ القضية قيد إصدار الوكالة
+              </p>
+              <p className="mt-1.5 text-sm text-yellow-800">
+                الفريق يستطيع العمل التحضيري، لكن لا يمكن جدولة جلسة محكمة قبل صدور الوكالة الشرعية.
+              </p>
+              <p className="mt-2 text-xs text-yellow-700">
+                عدد الأيام منذ التفعيل:{" "}
+                <span className="font-semibold">{toEnglishDigits(daysSincePending)}</span>{" "}
+                {daysSincePending === 1 ? "يوم" : "يومًا"}
+              </p>
+            </div>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => setShowAddAgency(true)}
+                className="shrink-0 rounded-lg bg-yellow-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+              >
+                إضافة رقم الوكالة ←
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -652,6 +689,11 @@ export function CaseDetailView({
         <ScheduleSessionModal
           caseId={caseData.id}
           defaultCourt={caseData.courtName}
+          pendingAgency={isPendingAgency}
+          onAddAgency={() => {
+            setShowScheduleModal(false);
+            setShowAddAgency(true);
+          }}
           onClose={() => setShowScheduleModal(false)}
         />
       )}
@@ -675,6 +717,9 @@ export function CaseDetailView({
           currentValue={caseData.courtCaseNumber}
           onClose={() => setShowCourtNumberModal(false)}
         />
+      )}
+      {showAddAgency && (
+        <AddAgencyModal caseId={caseData.id} onClose={() => setShowAddAgency(false)} />
       )}
     </div>
   );

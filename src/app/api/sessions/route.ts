@@ -60,6 +60,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "لا تملك صلاحية جدولة جلسة لهذه القضية" }, { status: 403 });
   }
 
+  // حظر جلسات المحكمة قبل صدور الوكالة — يُسمح فقط باجتماعات التسوية الودية.
+  if (caseData.status === "pending_agency") {
+    const AGENCY_FREE_SESSION_TYPES = ["negotiation_meeting"];
+    if (!AGENCY_FREE_SESSION_TYPES.includes(body.sessionType)) {
+      return NextResponse.json(
+        {
+          error: "agency_required",
+          message: "لا يمكن جدولة جلسة محكمة قبل إصدار الوكالة الشرعية",
+        },
+        { status: 403 }
+      );
+    }
+  }
+
   const sessionDate = new Date(body.sessionDate);
 
   const created = await prisma.session.create({

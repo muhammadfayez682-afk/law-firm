@@ -68,6 +68,10 @@ export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
   agency_expiring_soon: { label: "وكالة تقترب من الانتهاء", description: "وكالة تنتهي خلال 30 يومًا", icon: "📜", category: "agency", defaultPriority: "normal" },
   agency_expiring_urgent: { label: "وكالة توشك على الانتهاء", description: "وكالة تنتهي خلال 7 أيام", icon: "📜", category: "agency", defaultPriority: "high" },
   agency_expired: { label: "انتهاء وكالة", description: "انتهت صلاحية وكالة", icon: "⛔", category: "agency", defaultPriority: "urgent" },
+  agency_pending_reminder: { label: "الوكالة لم تصدر بعد", description: "مرّت 3 أيام على التفعيل بلا وكالة", icon: "⏳", category: "agency", defaultPriority: "normal" },
+  agency_pending_urgent: { label: "متابعة الوكالة مطلوبة", description: "مرّ أسبوع على التفعيل بلا وكالة", icon: "⏳", category: "agency", defaultPriority: "high" },
+  agency_delayed: { label: "قضية متأخرة الوكالة", description: "مرّ أسبوعان على التفعيل بلا وكالة", icon: "🚩", category: "agency", defaultPriority: "urgent" },
+  agency_issued: { label: "صدور الوكالة", description: "صدرت الوكالة والقضية صارت نشطة كاملة", icon: "📜", category: "agency", defaultPriority: "normal" },
 
   // التسوية
   settlement_deadline_soon: { label: "مهلة تسوية تقترب", description: "مهلة تسوية تنتهي خلال 7 أيام", icon: "🤝", category: "settlement", defaultPriority: "normal" },

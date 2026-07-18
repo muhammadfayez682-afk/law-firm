@@ -126,6 +126,7 @@ enum CaseType {
 
 enum CaseStatus {
   intake
+  pending_agency // نشطة والفريق يعمل، لكن الوكالة لم تصدر بعد — لا جلسات محكمة
   amicable_settlement
   settled_amicably
   open
@@ -668,6 +669,9 @@ model IntakeRequest {
   feeAgreementDocId      String?
   advancePaymentReceived Boolean   @default(false)
 
+  // توقّع إصدار الوكالة (عند التفعيل بدون وكالة) — لتذكير أدق بالمتابعة.
+  agencyExpectedDate DateTime?
+
   // ربط بالقضية عند القبول
   case   Case?   @relation(fields: [caseId], references: [id])
   caseId String? @unique // القضية المُنشأة
@@ -826,6 +830,10 @@ enum NotificationType {
   agency_expiring_soon
   agency_expiring_urgent
   agency_expired
+  agency_pending_reminder // مرّت 3 أيام على التفعيل بلا وكالة
+  agency_pending_urgent // مرّ أسبوع بلا وكالة
+  agency_delayed // مرّ أسبوعان بلا وكالة
+  agency_issued // صدرت الوكالة والقضية صارت نشطة كاملة
 
   // التسوية
   settlement_deadline_soon

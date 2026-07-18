@@ -131,6 +131,23 @@ export async function getReportsStats() {
     sideStats(DEFENDANT_SIDE),
   ]);
 
+  // تقرير الوكالات.
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const fourteenDaysAgo = new Date(now.getTime() - 14 * MS_PER_DAY);
+  const thirtyDaysAhead = new Date(now.getTime() + 30 * MS_PER_DAY);
+  const [pendingAgencyCount, pendingAgencyOver14, expiringAgencies, expiredAgencies] = await Promise.all([
+    prisma.case.count({ where: { status: "pending_agency" } }),
+    prisma.case.count({ where: { status: "pending_agency", openDate: { lt: fourteenDaysAgo } } }),
+    prisma.agency.count({ where: { expiryDate: { gte: now, lte: thirtyDaysAhead } } }),
+    prisma.agency.count({ where: { expiryDate: { lt: now } } }),
+  ]);
+  const agencyReport = {
+    pendingAgencyCount,
+    pendingAgencyOver14,
+    expiringAgencies,
+    expiredAgencies,
+  };
+
   return {
     closedThisMonth,
     closedCasesCount,
@@ -143,6 +160,7 @@ export async function getReportsStats() {
     caseTypeDistribution,
     lawyerPerformance,
     partyRoleStats: { plaintiffSide, defendantSide },
+    agencyReport,
   };
 }
 

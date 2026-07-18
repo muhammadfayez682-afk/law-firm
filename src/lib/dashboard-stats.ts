@@ -73,6 +73,7 @@ export async function getDashboardStats(user: SessionUser) {
     recentCasesRaw,
     upcomingSessionsRaw,
     qiwaCasesForAlerts,
+    pendingAgencyRaw,
   ] = await Promise.all([
     prisma.case.count({
       where: { ...caseWhere, status: { notIn: [...CLOSED_STATUSES] } },
@@ -122,6 +123,11 @@ export async function getDashboardStats(user: SessionUser) {
       where: { ...caseWhere, status: "amicable_settlement", caseType: "labor" },
       include: { client: true, amicableSettlement: true },
     }),
+    prisma.case.findMany({
+      where: { ...caseWhere, status: "pending_agency" },
+      orderBy: { openDate: "asc" }, // الأقدم أولًا
+      include: { client: true, responsibleLawyer: { select: { fullName: true } } },
+    }),
   ]);
 
   const recentCases = recentCasesRaw.map((c) => ({
@@ -155,12 +161,22 @@ export async function getDashboardStats(user: SessionUser) {
     })
     .filter((a): a is { clientName: string; daysLeft: number; caseId: string } => a !== null);
 
+  const pendingAgencyCases = pendingAgencyRaw.map((c) => ({
+    id: c.id,
+    internalNumber: c.internalNumber,
+    displayNumber: c.displayNumber ?? c.internalNumber,
+    clientName: c.client.fullName,
+    lawyerName: c.responsibleLawyer.fullName,
+    daysSince: Math.floor((now.getTime() - new Date(c.openDate).getTime()) / MS_PER_DAY),
+  }));
+
   return {
     activeCases,
     weekSessions,
     qiwaSettlementCases,
     overdueSessions,
     pendingClosureCount,
+    pendingAgencyCases,
     myDraftMemos,
     myChangesRequestedMemos,
     myApprovedMemos,

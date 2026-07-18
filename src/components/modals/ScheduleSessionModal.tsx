@@ -19,13 +19,20 @@ const REMINDER_OPTIONS = [
   { value: 7 * 24 * 60, label: "أسبوع" },
 ];
 
+// أنواع الجلسات المسموحة قبل صدور الوكالة (لا تحتاج وكالة محكمة).
+const AGENCY_FREE_SESSION_TYPES: SessionType[] = ["negotiation_meeting"];
+
 export function ScheduleSessionModal({
   caseId,
   defaultCourt,
+  pendingAgency = false,
+  onAddAgency,
   onClose,
 }: {
   caseId: string;
   defaultCourt?: string | null;
+  pendingAgency?: boolean;
+  onAddAgency?: () => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -92,14 +99,33 @@ export function ScheduleSessionModal({
             <select
               name="sessionType"
               required
+              defaultValue={pendingAgency ? "negotiation_meeting" : undefined}
               className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold"
             >
-              {SESSION_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
+              {SESSION_TYPE_OPTIONS.map((opt) => {
+                const disabled = pendingAgency && !AGENCY_FREE_SESSION_TYPES.includes(opt.value);
+                return (
+                  <option key={opt.value} value={opt.value} disabled={disabled}>
+                    {opt.label}
+                    {disabled ? " — يتطلب إصدار الوكالة أولاً" : ""}
+                  </option>
+                );
+              })}
             </select>
+            {pendingAgency && (
+              <div className="mt-2 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                ⏳ القضية قيد إصدار الوكالة — جلسات المحكمة معطّلة حتى تصدر الوكالة. يُسمح باجتماعات التسوية الودية فقط.
+                {onAddAgency && (
+                  <button
+                    type="button"
+                    onClick={onAddAgency}
+                    className="mr-2 font-semibold text-yellow-900 underline"
+                  >
+                    أضف الوكالة الآن
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div>

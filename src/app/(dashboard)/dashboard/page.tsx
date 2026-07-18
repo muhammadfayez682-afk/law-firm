@@ -7,12 +7,23 @@ import { getDayNameAr, formatTime } from "@/lib/dateUtils";
 import { isSystemAdmin } from "@/lib/rbac";
 import { toEnglishDigits } from "@/lib/formatNumber";
 
+/** لون عدّاد الأيام حسب التأخّر: أصفر > 3، برتقالي > 7، أحمر > 14. */
+function pendingAgencyDayColor(days: number): string {
+  if (days > 14) return "text-red-700";
+  if (days > 7) return "text-orange-600";
+  if (days > 3) return "text-yellow-700";
+  return "text-foreground/60";
+}
+
 function getStatusDisplay(status: string, isOverdue: boolean) {
   if (isOverdue) {
     return { label: "متأخرة", className: "bg-red-100 text-red-700" };
   }
   if (status === "amicable_settlement") {
     return { label: "قيد التسوية الودية", className: "bg-taradhi/10 text-taradhi" };
+  }
+  if (status === "pending_agency") {
+    return { label: "قيد إصدار الوكالة", className: "bg-yellow-100 text-yellow-800" };
   }
   return { label: "جارية", className: "bg-orange-100 text-orange-700" };
 }
@@ -139,6 +150,32 @@ export default async function DashboardPage() {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {(isSystemAdmin(role) || role === "supervisor") && stats.pendingAgencyCases.length > 0 && (
+        <div className="rounded-xl border border-yellow-300 bg-yellow-50 p-5">
+          <h2 className="mb-3 flex items-center gap-2 font-semibold text-yellow-900">
+            ⏳ قضايا قيد إصدار الوكالة: {toEnglishDigits(stats.pendingAgencyCases.length)}
+          </h2>
+          <ul className="space-y-2">
+            {stats.pendingAgencyCases.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/cases/${c.id}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white/70 px-4 py-2.5 text-sm transition-colors hover:bg-white"
+                >
+                  <span className="font-medium text-navy" dir="ltr">{c.displayNumber}</span>
+                  <span className="text-foreground/70">{c.clientName}</span>
+                  <span className="text-xs text-foreground/50">{c.lawyerName}</span>
+                  <span className={`font-semibold ${pendingAgencyDayColor(c.daysSince)}`}>
+                    {toEnglishDigits(c.daysSince)} {c.daysSince === 1 ? "يوم" : "يومًا"}
+                  </span>
+                  <span className="text-xs text-yellow-700">متابعة ←</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

@@ -9,14 +9,16 @@ type Results = {
   settlementAlerts: number;
   taskAlerts: number;
   invoiceAlerts: number;
+  pendingAgencyAlerts: number;
 };
 
 const LABELS: Record<keyof Results, string> = {
   sessionReminders: "تذكيرات الجلسات",
-  agencyAlerts: "تنبيهات الوكالات",
+  agencyAlerts: "تنبيهات انتهاء الوكالات",
   settlementAlerts: "تنبيهات مهل التسوية",
   taskAlerts: "تنبيهات المهام",
   invoiceAlerts: "تنبيهات الفواتير",
+  pendingAgencyAlerts: "تنبيهات قضايا قيد إصدار الوكالة",
 };
 
 export function TriggerRemindersButton() {

@@ -2,6 +2,7 @@ import type { CaseStatus } from "@prisma/client";
 
 const STATUS_CONFIG: Record<CaseStatus, { label: string; className: string }> = {
   intake: { label: "استقبال", className: "bg-slate-100 text-slate-700" },
+  pending_agency: { label: "قيد إصدار الوكالة", className: "bg-yellow-100 text-yellow-800" },
   amicable_settlement: { label: "تراضٍ", className: "bg-taradhi/10 text-taradhi" },
   settled_amicably: { label: "تمت التسوية وديًا", className: "bg-emerald-100 text-emerald-700" },
   open: { label: "مفتوحة", className: "bg-blue-100 text-blue-700" },

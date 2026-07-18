@@ -811,6 +811,8 @@ function ActivateModal({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  // هل الوكالة جاهزة؟ now = املأها الآن · expected = يتوقع إصدارها لاحقًا · none = بعد بدء العمل
+  const [agencyMode, setAgencyMode] = useState<"now" | "expected" | "none">("none");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -826,11 +828,27 @@ function ActivateModal({
           caseType: fd.get("caseType"),
           title: fd.get("title") || null,
           clientType: fd.get("clientType"),
+          ...(agencyMode === "now"
+            ? {
+                agencyNumber: fd.get("agencyNumber") || null,
+                agencyType: fd.get("agencyType") || "general",
+                agencyScope: fd.get("agencyScope") || null,
+                agencyIssueDate: fd.get("agencyIssueDate") || null,
+                agencyExpiryDate: fd.get("agencyExpiryDate") || null,
+              }
+            : {}),
+          ...(agencyMode === "expected"
+            ? { agencyExpectedDate: fd.get("agencyExpectedDate") || null }
+            : {}),
         }),
       });
       const d = await res.json().catch(() => null);
       if (!res.ok) { toast.error(d?.error ?? "تعذّر تفعيل القضية."); return; }
-      toast.success(`تم تفعيل القضية ${d.internalNumber}`);
+      toast.success(
+        d.pendingAgency
+          ? `تم تفعيل القضية ${d.internalNumber} — قيد إصدار الوكالة`
+          : `تم تفعيل القضية ${d.internalNumber}`
+      );
       router.push(`/cases/${d.caseId}`);
       router.refresh();
     } finally { setLoading(false); }
@@ -871,6 +889,74 @@ function ActivateModal({
             </select>
           </div>
         </div>
+
+        {/* الوكالة: اختيارية عند التفعيل */}
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50/60 p-4">
+          <label className={labelClass}>هل الوكالة الشرعية جاهزة؟</label>
+          <div className="flex flex-wrap gap-2">
+            {[
+              { v: "now", l: "نعم — أُدخلها الآن" },
+              { v: "expected", l: "لا — متى يتوقع إصدارها؟" },
+              { v: "none", l: "تُصدر بعد بدء العمل" },
+            ].map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                onClick={() => setAgencyMode(o.v as "now" | "expected" | "none")}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  agencyMode === o.v ? "bg-navy text-white" : "border border-black/10 text-navy hover:bg-black/5"
+                }`}
+              >
+                {o.l}
+              </button>
+            ))}
+          </div>
+
+          {agencyMode === "now" && (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>رقم الوكالة <span className="text-red-600">*</span></label>
+                <input name="agencyNumber" inputMode="numeric" dir="ltr" className={inputClass} placeholder="مثال: 441234567" />
+              </div>
+              <div>
+                <label className={labelClass}>نوع الوكالة</label>
+                <select name="agencyType" defaultValue="general" className={inputClass}>
+                  <option value="general">عامة</option>
+                  <option value="special">خاصة</option>
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className={labelClass}>نطاق الصلاحيات</label>
+                <textarea name="agencyScope" rows={2} className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>تاريخ الإصدار <span className="text-red-600">*</span></label>
+                <input name="agencyIssueDate" type="date" dir="ltr" className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>تاريخ الانتهاء</label>
+                <input name="agencyExpiryDate" type="date" dir="ltr" className={inputClass} />
+              </div>
+            </div>
+          )}
+
+          {agencyMode === "expected" && (
+            <div className="mt-4">
+              <label className={labelClass}>التاريخ المتوقع لإصدار الوكالة</label>
+              <input name="agencyExpectedDate" type="date" dir="ltr" className={inputClass} />
+              <p className="mt-1 text-xs text-yellow-700">
+                ستُفعّل القضية بحالة «قيد إصدار الوكالة»، ويُستخدم هذا التاريخ لتذكير أدق بالمتابعة.
+              </p>
+            </div>
+          )}
+
+          {agencyMode === "none" && (
+            <p className="mt-3 text-xs text-yellow-700">
+              ستُفعّل القضية بحالة «قيد إصدار الوكالة» — الفريق يعمل تحضيريًا دون جدولة جلسات محكمة حتى تصدر الوكالة.
+            </p>
+          )}
+        </div>
+
         <div className="flex justify-end gap-3 border-t border-black/5 pt-4">
           <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5">إلغاء</button>
           <button type="submit" disabled={loading} className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60">

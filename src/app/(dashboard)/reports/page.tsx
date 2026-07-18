@@ -121,6 +121,36 @@ export default async function ReportsPage() {
       </div>
 
       <div className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 font-semibold text-navy">تقرير الوكالات</h2>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+            <p className="text-xs text-foreground/60">قيد إصدار الوكالة الآن</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-yellow-800">
+              {stats.agencyReport.pendingAgencyCount}
+            </p>
+          </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <p className="text-xs text-foreground/60">تأخّرت أكثر من أسبوعين</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-red-700">
+              {stats.agencyReport.pendingAgencyOver14}
+            </p>
+          </div>
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-4">
+            <p className="text-xs text-foreground/60">وكالات تقترب من الانتهاء (30 يومًا)</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-orange-600">
+              {stats.agencyReport.expiringAgencies}
+            </p>
+          </div>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p className="text-xs text-foreground/60">وكالات منتهية</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-gray-700">
+              {stats.agencyReport.expiredAgencies}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
         <h2 className="mb-4 font-semibold text-navy">توزيع القضايا حسب النوع</h2>
         <div className="space-y-3">
           {stats.caseTypeDistribution.map((c) => (

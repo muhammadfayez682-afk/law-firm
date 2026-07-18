@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import type { CaseType, ClientType, PartyRole } from "@prisma/client";
+import type { AgencyType, CaseStatus, CaseType, ClientType, PartyRole } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canActivateIntake } from "@/lib/intake";
@@ -44,6 +44,14 @@ export async function POST(request: NextRequest, { params }: Params) {
   const title =
     (typeof body.title === "string" && body.title.trim()) ||
     intake.disputeSummary.slice(0, 60);
+
+  // الوكالة اختيارية عند التفعيل: إن وُجد رقم + تاريخ إصدار تُنشأ ويُبدأ العمل كاملًا،
+  // وإلا تدخل القضية حالة "قيد إصدار الوكالة" (pending_agency) مع متابعة لاحقة.
+  const agencyNumber = typeof body.agencyNumber === "string" ? body.agencyNumber.trim() : "";
+  const agencyIssueDate = body.agencyIssueDate ? new Date(body.agencyIssueDate) : null;
+  const hasAgency = Boolean(agencyNumber && agencyIssueDate && !Number.isNaN(agencyIssueDate.getTime()));
+  const caseStatus: CaseStatus = hasAgency ? "in_progress" : "pending_agency";
+  const agencyExpectedDate = body.agencyExpectedDate ? new Date(body.agencyExpectedDate) : null;
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -91,6 +99,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           internalNumber,
           // عند التفعيل لا يوجد رقم محكمة ولا رقم تسوية بعد، فالرقم المعروض = الداخلي.
           displayNumber: internalNumber,
+          status: caseStatus,
           title,
           caseType,
           clientId,
@@ -134,6 +143,25 @@ export async function POST(request: NextRequest, { params }: Params) {
         },
       });
 
+      // 4.ب. إنشاء الوكالة إن قُدّمت بياناتها عند التفعيل.
+      if (hasAgency) {
+        const expiry = body.agencyExpiryDate
+          ? new Date(body.agencyExpiryDate)
+          : new Date(agencyIssueDate!.getFullYear() + 1, agencyIssueDate!.getMonth(), agencyIssueDate!.getDate());
+        await tx.agency.create({
+          data: {
+            clientId,
+            agencyNumber,
+            agencyType: (body.agencyType as AgencyType) || "general",
+            scopeText: typeof body.agencyScope === "string" && body.agencyScope.trim()
+              ? body.agencyScope.trim()
+              : "غير محدد",
+            issueDate: agencyIssueDate!,
+            expiryDate: expiry,
+          },
+        });
+      }
+
       // 5. نقل مستندات الاستلام إلى مستندات القضية.
       for (const doc of intake.documents) {
         await tx.document.create({
@@ -161,6 +189,9 @@ export async function POST(request: NextRequest, { params }: Params) {
           status: "accepted",
           caseId: newCase.id,
           feeAgreementSignedAt: intake.feeAgreementSignedAt ?? new Date(),
+          ...(agencyExpectedDate && !Number.isNaN(agencyExpectedDate.getTime())
+            ? { agencyExpectedDate }
+            : {}),
         },
       });
 
@@ -177,7 +208,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     });
 
     return NextResponse.json(
-      { caseId: created.id, internalNumber: created.internalNumber, clientRoleLabel: PARTY_ROLE_LABELS_AR[clientPartyRole] },
+      {
+        caseId: created.id,
+        internalNumber: created.internalNumber,
+        clientRoleLabel: PARTY_ROLE_LABELS_AR[clientPartyRole],
+        status: created.status,
+        pendingAgency: !hasAgency,
+      },
       { status: 201 }
     );
   } catch {
