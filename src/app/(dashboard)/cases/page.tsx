@@ -108,7 +108,19 @@ export default async function CasesPage({
             >
               <span className="truncate font-medium text-navy">{c.title}</span>
               <span className="min-w-0">
-                <CaseNumberDisplay case={c} variant="inline" />
+                <CaseNumberDisplay
+                  case={{
+                    internalNumber: c.internalNumber,
+                    courtCaseNumber: c.courtCaseNumber,
+                    amicableSettlement: c.amicableSettlement
+                      ? {
+                          requestNumber: c.amicableSettlement.requestNumber,
+                          platform: c.amicableSettlement.platform,
+                        }
+                      : null,
+                  }}
+                  variant="inline"
+                />
               </span>
               <span className="truncate text-foreground/70">{c.client.fullName}</span>
               <span className="text-foreground/70">
