@@ -1,4 +1,4 @@
-import type { Prisma, TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
+import type { Prisma, TaskAssigneeStatus, TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
 import type { SessionUser } from "@/lib/rbac";
 import { isManagement } from "@/lib/rbac";
 
@@ -84,16 +84,42 @@ export function displayTaskStatus(task: OverdueInput, now?: Date): TaskStatus {
  */
 export function taskVisibilityWhere(user: SessionUser): Prisma.TaskWhereInput {
   if (isManagement(user.role) || user.role === "supervisor") return {};
-  return { OR: [{ assignedToId: user.id }, { assignedById: user.id }] };
+  return {
+    OR: [
+      { assignedToId: user.id },
+      { assignedById: user.id },
+      { assignees: { some: { userId: user.id } } },
+    ],
+  };
 }
 
-/** هل يستطيع المستخدم فتح مهمة محددة؟ */
+/** هل يستطيع المستخدم فتح مهمة محددة؟ (يشمل المُسندين المتعددين) */
 export function canAccessTask(
   user: SessionUser,
-  task: { assignedToId: string; assignedById: string }
+  task: { assignedToId: string; assignedById: string; assignees?: { userId: string }[] }
 ): boolean {
   if (isManagement(user.role) || user.role === "supervisor") return true;
-  return task.assignedToId === user.id || task.assignedById === user.id;
+  if (task.assignedToId === user.id || task.assignedById === user.id) return true;
+  return (task.assignees ?? []).some((a) => a.userId === user.id);
+}
+
+/**
+ * تُشتقّ حالة المهمة من حالات مُسنديها:
+ * - منجزة: كل المُسندين غير المنسحبين منجزون (وواحد على الأقل منجز).
+ * - قيد التنفيذ: أي مُسند بدأ أو أنجز (دون اكتمال الكل).
+ * - معلقة: لم يبدأ أحد.
+ */
+export function computeTaskStatusFromAssignees(
+  assignees: { status: TaskAssigneeStatus }[]
+): { status: "pending" | "in_progress" | "completed"; completed: boolean } {
+  const active = assignees.filter((a) => a.status !== "declined");
+  const completed = active.filter((a) => a.status === "completed").length;
+  const anyStarted = assignees.some((a) => a.status === "in_progress" || a.status === "completed");
+  if (active.length > 0 && completed === active.length) {
+    return { status: "completed", completed: true };
+  }
+  if (anyStarted) return { status: "in_progress", completed: false };
+  return { status: "pending", completed: false };
 }
 
 /** المشرف ومسؤول النظام يسندون لأي موظف. */

@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
-  canChangeTaskStatus,
   canManageTask,
   canAccessTask,
   displayTaskStatus,
@@ -25,7 +24,9 @@ export default async function TaskDetailPage({
     include: {
       assignedTo: { select: { fullName: true } },
       assignedBy: { select: { fullName: true } },
+      assignees: { include: { user: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
       case: { select: { id: true, internalNumber: true, title: true } },
+      service: { select: { id: true, serviceNumber: true, title: true } },
       intake: { select: { id: true, requestNumber: true } },
       comments: { include: { author: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
     },
@@ -33,6 +34,8 @@ export default async function TaskDetailPage({
 
   if (!task) notFound();
   if (!canAccessTask(session.user, task)) notFound();
+
+  const myAssignee = task.assignees.find((a) => a.userId === session.user.id);
 
   const canManage = canManageTask(session.user, task);
   const assignableUsers = canManage
@@ -58,8 +61,19 @@ export default async function TaskDetailPage({
     caseId: task.case?.id ?? null,
     caseInternalNumber: task.case?.internalNumber ?? null,
     caseTitle: task.case?.title ?? null,
+    serviceId: task.service?.id ?? null,
+    serviceNumber: task.service?.serviceNumber ?? null,
+    serviceTitle: task.service?.title ?? null,
     intakeId: task.intake?.id ?? null,
     intakeRequestNumber: task.intake?.requestNumber ?? null,
+    assignees: task.assignees.map((a) => ({
+      userId: a.userId,
+      name: a.user.fullName,
+      status: a.status,
+      completionNote: a.completionNote,
+      completedAt: a.completedAt?.toISOString() ?? null,
+    })),
+    myStatus: myAssignee?.status ?? null,
     comments: task.comments.map((c) => ({
       id: c.id,
       content: c.content,
@@ -71,7 +85,6 @@ export default async function TaskDetailPage({
   return (
     <TaskDetailView
       task={serialized}
-      canChangeStatus={canChangeTaskStatus(session.user, task)}
       canManage={canManage}
       assignableUsers={assignableUsers}
     />

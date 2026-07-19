@@ -620,6 +620,20 @@ export function CaseDetailView({
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {s.meetingLink && (() => {
+                        const soon = new Date(s.sessionDate).getTime() - Date.now() <= 3600 * 1000 && new Date(s.sessionDate).getTime() >= Date.now();
+                        return (
+                          <a
+                            href={s.meetingLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-white ${soon ? "animate-pulse bg-emerald-600" : "bg-taradhi"}`}
+                            title="فتح رابط الاجتماع عن بُعد"
+                          >
+                            🔗 فتح الرابط
+                          </a>
+                        );
+                      })()}
                       <span
                         className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${SESSION_STATUS_STYLES[s.status]}`}
                       >

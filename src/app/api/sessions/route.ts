@@ -76,6 +76,21 @@ export async function POST(request: NextRequest) {
 
   const sessionDate = new Date(body.sessionDate);
 
+  // نمط الجلسة + رابط الاجتماع عن بُعد (إلزامي وصالح لـ remote/hybrid).
+  const sessionMode = ["in_person", "remote", "hybrid"].includes(body.sessionMode) ? body.sessionMode : "in_person";
+  const isRemote = sessionMode === "remote" || sessionMode === "hybrid";
+  const meetingLink = typeof body.meetingLink === "string" ? body.meetingLink.trim() : "";
+  if (isRemote) {
+    if (!meetingLink) {
+      return NextResponse.json({ error: "رابط الاجتماع إلزامي للجلسات عن بُعد" }, { status: 400 });
+    }
+    try {
+      new URL(meetingLink);
+    } catch {
+      return NextResponse.json({ error: "رابط الاجتماع غير صالح" }, { status: 400 });
+    }
+  }
+
   const created = await prisma.session.create({
     data: {
       caseId: body.caseId,
@@ -84,6 +99,10 @@ export async function POST(request: NextRequest) {
       hijriDate: toHijri(sessionDate),
       court: body.court || null,
       reminderBefore: body.reminderBefore ? Number(body.reminderBefore) : null,
+      sessionMode,
+      meetingLink: isRemote ? meetingLink : null,
+      meetingPlatform: isRemote && body.meetingPlatform ? body.meetingPlatform : null,
+      meetingPassword: isRemote && body.meetingPassword ? String(body.meetingPassword) : null,
     },
   });
 

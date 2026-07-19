@@ -29,7 +29,9 @@ export async function GET(_request: NextRequest, { params }: Params) {
     include: {
       assignedTo: { select: { fullName: true } },
       assignedBy: { select: { fullName: true } },
+      assignees: { include: { user: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
       case: { select: { id: true, internalNumber: true, title: true } },
+      service: { select: { id: true, serviceNumber: true, title: true } },
       intake: { select: { id: true, requestNumber: true } },
       comments: { include: { author: { select: { fullName: true } } }, orderBy: { createdAt: "asc" } },
     },

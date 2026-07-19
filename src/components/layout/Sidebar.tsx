@@ -31,6 +31,7 @@ function buildNavGroups(role: UserRole): NavGroup[] {
       label: "إدارة القضايا",
       items: [
         { href: "/cases", label: "القضايا", icon: "cases" },
+        { href: "/services", label: "الخدمات القانونية", icon: "templates" },
         { href: "/clients", label: "العملاء", icon: "clients" },
         { href: "/sessions", label: "الجلسات", icon: "sessions" },
         // المذكرات تظهر لمن يشارك في العمل القضائي (لا السكرتارية ولا المحاسب).

@@ -15,7 +15,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const task = await prisma.task.findUnique({
     where: { id },
-    select: { id: true, assignedToId: true, assignedById: true, title: true, taskNumber: true },
+    select: { id: true, assignedToId: true, assignedById: true, title: true, taskNumber: true, assignees: { select: { userId: true } } },
   });
   if (!task) return NextResponse.json({ error: "المهمة غير موجودة" }, { status: 404 });
   if (!canAccessTask(session.user, task)) {
@@ -35,8 +35,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     data: { userId: session.user.id, action: "create", resourceType: "TaskComment", resourceId: comment.id },
   });
 
-  // إشعار الطرف الآخر في المهمة (المسند إليه/المسنِد) عدا كاتب الملاحظة.
-  const otherPartyIds = [task.assignedToId, task.assignedById].filter((uid) => uid !== session.user.id);
+  // إشعار كل أطراف المهمة (المُسندون + المُنشئ) عدا كاتب الملاحظة.
+  const otherPartyIds = [
+    task.assignedById,
+    ...task.assignees.map((a) => a.userId),
+  ].filter((uid) => uid !== session.user.id);
   await notifyBulk(otherPartyIds, {
     type: "task_comment_added",
     priority: "normal",

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import type { TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
+import type { TaskAssigneeStatus, TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
 import {
   TASK_CATEGORY_LABELS_AR,
   TASK_CATEGORY_STYLES,
@@ -37,19 +37,35 @@ type TaskData = {
   caseId: string | null;
   caseInternalNumber: string | null;
   caseTitle: string | null;
+  serviceId: string | null;
+  serviceNumber: string | null;
+  serviceTitle: string | null;
   intakeId: string | null;
   intakeRequestNumber: string | null;
+  assignees: { userId: string; name: string; status: TaskAssigneeStatus; completionNote: string | null; completedAt: string | null }[];
+  myStatus: TaskAssigneeStatus | null;
   comments: { id: string; content: string; authorName: string; createdAt: string }[];
+};
+
+const ASSIGNEE_STATUS_LABELS: Record<TaskAssigneeStatus, string> = {
+  pending: "لم يبدأ",
+  in_progress: "قيد التنفيذ",
+  completed: "أنجز",
+  declined: "اعتذر",
+};
+const ASSIGNEE_STATUS_STYLES: Record<TaskAssigneeStatus, string> = {
+  pending: "bg-gray-100 text-gray-600",
+  in_progress: "bg-blue-100 text-blue-700",
+  completed: "bg-emerald-100 text-emerald-700",
+  declined: "bg-orange-100 text-orange-700",
 };
 
 export function TaskDetailView({
   task,
-  canChangeStatus,
   canManage,
   assignableUsers,
 }: {
   task: TaskData;
-  canChangeStatus: boolean;
   canManage: boolean;
   assignableUsers: { id: string; fullName: string; role: UserRole }[];
 }) {
@@ -59,10 +75,11 @@ export function TaskDetailView({
   const [showEdit, setShowEdit] = useState(false);
   const isClosed = task.status === "completed" || task.status === "cancelled";
 
-  async function changeStatus(status: string, completionNote?: string) {
+  /** تحديث حالتي الخاصة كمُسند (عبر my-status). */
+  async function setMyStatus(status: string, completionNote?: string) {
     setBusy(true);
     try {
-      const res = await fetch(`/api/tasks/${task.id}/status`, {
+      const res = await fetch(`/api/tasks/${task.id}/my-status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, completionNote }),
@@ -117,19 +134,28 @@ export function TaskDetailView({
         <Link href="/tasks" className="text-sm text-gold hover:underline">العودة للمهام</Link>
       </div>
 
-      {/* الأزرار */}
+      {/* أزرار حالتي كمُسند */}
       <div className="flex flex-wrap gap-3">
-        {canChangeStatus && task.status === "pending" && (
-          <button type="button" disabled={busy} onClick={() => changeStatus("in_progress")}
-            className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
-            بدء التنفيذ
-          </button>
+        {task.myStatus && !isClosed && task.myStatus !== "completed" && task.myStatus !== "declined" && (
+          <>
+            {task.myStatus === "pending" && (
+              <button type="button" disabled={busy} onClick={() => setMyStatus("in_progress")}
+                className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60">
+                بدء نصيبي
+              </button>
+            )}
+            <button type="button" disabled={busy} onClick={() => setShowComplete(true)}
+              className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
+              إنهاء نصيبي
+            </button>
+            <button type="button" disabled={busy} onClick={() => setMyStatus("declined")}
+              className="rounded-lg border border-orange-300 px-5 py-2 text-sm font-medium text-orange-700 hover:bg-orange-50 disabled:opacity-60">
+              اعتذار
+            </button>
+          </>
         )}
-        {canChangeStatus && task.status === "in_progress" && (
-          <button type="button" disabled={busy} onClick={() => setShowComplete(true)}
-            className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
-            إنهاء المهمة
-          </button>
+        {task.myStatus === "completed" && (
+          <span className="rounded-lg bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">✓ أنجزتَ نصيبك</span>
         )}
         {canManage && !isClosed && (
           <button type="button" disabled={busy} onClick={() => setShowEdit(true)}
@@ -145,13 +171,29 @@ export function TaskDetailView({
         )}
       </div>
 
+      {/* المُسندون + حالة كل واحد */}
+      <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <h2 className="mb-3 font-semibold text-navy">المُسندون ({task.assignees.length})</h2>
+        <ul className="space-y-2">
+          {task.assignees.map((a) => (
+            <li key={a.userId} className="rounded-lg border border-black/5 px-4 py-2.5 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-navy">{a.name}</span>
+                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${ASSIGNEE_STATUS_STYLES[a.status]}`}>
+                  {ASSIGNEE_STATUS_LABELS[a.status]}
+                </span>
+              </div>
+              {a.completionNote && <p className="mt-1 whitespace-pre-wrap text-xs text-foreground/60">{a.completionNote}</p>}
+            </li>
+          ))}
+        </ul>
+      </section>
+
       {/* التفاصيل */}
       <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
         <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <Field label="المسند إليه" value={task.assignedToName} />
           <Field label="المسند من" value={task.assignedByName} />
           <Field label="تاريخ الاستحقاق" value={task.dueDate ? formatDualDate(task.dueDate) : "—"} dir="ltr" />
-          {task.startedAt && <Field label="بدأت في" value={formatDualDate(task.startedAt)} dir="ltr" />}
           {task.completedAt && <Field label="أُنجزت في" value={formatDualDate(task.completedAt)} dir="ltr" />}
         </dl>
         {task.description && (
@@ -162,13 +204,18 @@ export function TaskDetailView({
         )}
       </section>
 
-      {(task.caseId || task.intakeId) && (
+      {(task.caseId || task.serviceId || task.intakeId) && (
         <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
           <h2 className="mb-2 font-semibold text-navy">مرتبطة بـ</h2>
           {task.caseId ? (
             <Link href={`/cases/${task.caseId}`} className="flex items-center justify-between rounded-lg border border-black/5 px-4 py-3 text-sm hover:bg-navy/5">
               <span className="font-medium text-navy">{task.caseTitle}</span>
               <span className="font-mono text-xs text-foreground/50" dir="ltr">{task.caseInternalNumber}</span>
+            </Link>
+          ) : task.serviceId ? (
+            <Link href={`/services/${task.serviceId}`} className="flex items-center justify-between rounded-lg border border-black/5 px-4 py-3 text-sm hover:bg-navy/5">
+              <span className="font-medium text-navy">{task.serviceTitle}</span>
+              <span className="font-mono text-xs text-foreground/50" dir="ltr">{task.serviceNumber}</span>
             </Link>
           ) : task.intakeId ? (
             <Link href={`/intake/${task.intakeId}`} className="flex items-center justify-between rounded-lg border border-black/5 px-4 py-3 text-sm hover:bg-navy/5">
@@ -193,9 +240,9 @@ export function TaskDetailView({
           busy={busy}
           onClose={() => setShowComplete(false)}
           onConfirm={async (note) => {
-            const ok = await changeStatus("completed", note);
+            const ok = await setMyStatus("completed", note);
             if (ok) {
-              toast.success("تم إنجاز المهمة");
+              toast.success("أُنجز نصيبك من المهمة");
               setShowComplete(false);
             }
           }}

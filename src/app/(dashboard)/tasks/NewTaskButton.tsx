@@ -8,11 +8,13 @@ export function NewTaskButton({
   users,
   cases,
   intakes,
+  services = [],
   currentUserId,
 }: {
   users: { id: string; fullName: string; role: UserRole }[];
   cases: { id: string; internalNumber: string; title: string }[];
   intakes: { id: string; requestNumber: string }[];
+  services?: { id: string; serviceNumber: string; title: string }[];
   currentUserId: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,6 +32,7 @@ export function NewTaskButton({
           users={users}
           cases={cases}
           intakes={intakes}
+          services={services}
           currentUserId={currentUserId}
           onClose={() => setOpen(false)}
         />

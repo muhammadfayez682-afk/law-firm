@@ -38,13 +38,15 @@ export default async function DashboardPage() {
   // مؤشرات المهام الشخصية.
   const now = new Date();
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  // «مهامي» تشمل المُسند الرئيسي والمُسندين المتعددين.
+  const mineWhere = { OR: [{ assignedToId: session.user.id }, { assignees: { some: { userId: session.user.id } } }] };
   const [myPendingTasks, overdueTasks, completedTasksThisWeek] = await Promise.all([
-    prisma.task.count({ where: { assignedToId: session.user.id, status: { in: ["pending", "in_progress"] } } }),
+    prisma.task.count({ where: { ...mineWhere, status: { in: ["pending", "in_progress"] } } }),
     prisma.task.count({
-      where: { assignedToId: session.user.id, status: { in: ["pending", "in_progress"] }, dueDate: { lt: now } },
+      where: { ...mineWhere, status: { in: ["pending", "in_progress"] }, dueDate: { lt: now } },
     }),
     prisma.task.count({
-      where: { assignedToId: session.user.id, status: "completed", completedAt: { gte: weekAgo } },
+      where: { ...mineWhere, status: "completed", completedAt: { gte: weekAgo } },
     }),
   ]);
 

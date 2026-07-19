@@ -54,6 +54,11 @@ model User {
   triggeredNotifications  Notification[]           @relation("NotificationTrigger")
   notificationPreferences NotificationPreference[]
   entityChanges           EntityChangeLog[]
+  taskAssignments         TaskAssignee[]
+  assignedServices        LegalService[]           @relation("ServiceAssignee")
+  createdServices         LegalService[]           @relation("ServiceCreator")
+  serviceDocuments        ServiceDocument[]
+  serviceNotes            ServiceNote[]
 
   @@map("users")
 }
@@ -85,6 +90,7 @@ model Client {
   agencies           Agency[]
   caseParties        CaseParty[]
   invoices           Invoice[]
+  services           LegalService[]
 
   // فهرس (غير فريد) لتسريع فحص تكرار الجوال. لا نجعله فريدًا لأن النظام
   // يسمح بتسجيل مكرر بعد تأكيد المستخدم (زر «متابعة الحفظ»). التفرّد على
@@ -322,6 +328,22 @@ enum SessionStatus {
   postponed
 }
 
+enum SessionMode {
+  in_person
+  remote
+  hybrid
+}
+
+enum SessionPlatform {
+  zoom
+  google_meet
+  microsoft_teams
+  najiz
+  qiwa
+  taradhi
+  other
+}
+
 model Session {
   id             String          @id @default(uuid())
   case           Case            @relation(fields: [caseId], references: [id])
@@ -332,6 +354,11 @@ model Session {
   court          String?
   reminderBefore Int?
   status         SessionStatus   @default(scheduled)
+  // نمط الجلسة + رابط الاجتماع عن بُعد (إلزامي عند remote/hybrid)
+  sessionMode     SessionMode      @default(in_person)
+  meetingLink     String?
+  meetingPlatform SessionPlatform?
+  meetingPassword String?
   minutes        SessionMinutes?
   filledTemplates FilledTemplate[]
 
@@ -751,17 +778,20 @@ model Task {
   description String?      @db.Text
   category    TaskCategory
 
-  // الإسناد
+  // الإسناد: assignedTo = المُسند الرئيسي (للتوافق)؛ assignees = كل المُسندين (تعدّد).
   assignedTo   User   @relation("TaskAssignee", fields: [assignedToId], references: [id])
   assignedToId String
   assignedBy   User   @relation("TaskCreator", fields: [assignedById], references: [id])
   assignedById String
+  assignees    TaskAssignee[]
 
-  // ربط اختياري بقضية أو طلب استلام
-  case     Case?          @relation(fields: [caseId], references: [id])
-  caseId   String?
-  intake   IntakeRequest? @relation(fields: [intakeId], references: [id])
-  intakeId String?
+  // ربط اختياري بقضية أو خدمة أو طلب استلام (أحدها فقط)
+  case      Case?          @relation(fields: [caseId], references: [id])
+  caseId    String?
+  service   LegalService?  @relation(fields: [serviceId], references: [id])
+  serviceId String?
+  intake    IntakeRequest? @relation(fields: [intakeId], references: [id])
+  intakeId  String?
 
   // التوقيت
   dueDate     DateTime?
@@ -784,8 +814,33 @@ model Task {
 
   @@index([assignedToId, status])
   @@index([caseId])
+  @@index([serviceId])
   @@index([intakeId])
   @@map("tasks")
+}
+
+enum TaskAssigneeStatus {
+  pending
+  in_progress
+  completed
+  declined
+}
+
+// مُسند فردي ضمن مهمة متعددة المُسندين — كل مُسند يدير حالته الخاصة.
+model TaskAssignee {
+  id             String             @id @default(uuid())
+  task           Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId         String
+  user           User               @relation(fields: [userId], references: [id])
+  userId         String
+  status         TaskAssigneeStatus @default(pending)
+  completedAt    DateTime?
+  completionNote String?            @db.Text
+  createdAt      DateTime           @default(now())
+
+  @@unique([taskId, userId])
+  @@index([userId, status])
+  @@map("task_assignees")
 }
 
 model TaskComment {
@@ -947,4 +1002,92 @@ model EntityChangeLog {
   @@index([entityType, entityId, changedAt])
   @@index([changedById, changedAt])
   @@map("entity_change_log")
+}
+
+// ===== الخدمات القانونية (وحدة مستقلة عن القضايا: لا محكمة/جلسات/خصومة) =====
+enum ServiceType {
+  legal_consultation // استشارة قانونية
+  company_formation // تأسيس شركة
+  documentation // توثيق
+  execution_request // طلبات التنفيذ
+  contract_drafting // صياغة عقود
+  other
+}
+
+enum ServiceStatus {
+  new
+  in_progress
+  pending_client
+  under_review
+  completed
+  cancelled
+}
+
+enum ServicePriority {
+  normal
+  high
+  urgent
+}
+
+model LegalService {
+  id            String          @id @default(uuid())
+  serviceNumber String          @unique // SRV-2026-0001
+  title         String
+  serviceType   ServiceType
+  description   String          @db.Text
+
+  client   Client @relation(fields: [clientId], references: [id])
+  clientId String
+
+  status   ServiceStatus   @default(new)
+  priority ServicePriority @default(normal)
+
+  assignedTo   User   @relation("ServiceAssignee", fields: [assignedToId], references: [id])
+  assignedToId String
+
+  requestedAt DateTime  @default(now())
+  dueDate     DateTime?
+  completedAt DateTime?
+
+  deliverable      String?  @db.Text // نص المخرج
+  deliverableNotes String?  @db.Text
+  fee              Decimal? @db.Decimal(12, 2)
+
+  createdBy   User     @relation("ServiceCreator", fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  documents ServiceDocument[]
+  notes     ServiceNote[]
+  tasks     Task[]
+
+  @@index([assignedToId, status])
+  @@index([clientId])
+  @@map("legal_services")
+}
+
+model ServiceDocument {
+  id           String       @id @default(uuid())
+  service      LegalService @relation(fields: [serviceId], references: [id])
+  serviceId    String
+  title        String
+  storagePath  String
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+  uploadedById String
+  createdAt    DateTime     @default(now())
+
+  @@map("service_documents")
+}
+
+model ServiceNote {
+  id        String       @id @default(uuid())
+  service   LegalService @relation(fields: [serviceId], references: [id])
+  serviceId String
+  content   String       @db.Text
+  author    User         @relation(fields: [authorId], references: [id])
+  authorId  String
+  createdAt DateTime     @default(now())
+
+  @@map("service_notes")
 }

@@ -856,6 +856,89 @@ async function main() {
     }
   }
 
+  // ===== الخدمات القانونية (5 خدمات موزّعة) =====
+  const serviceSeed: {
+    serviceNumber: string;
+    title: string;
+    serviceType: "legal_consultation" | "company_formation" | "documentation" | "execution_request" | "contract_drafting";
+    clientId: string;
+    assignedToId: string;
+    status: "new" | "in_progress" | "pending_client" | "under_review" | "completed";
+    fee?: number;
+  }[] = [
+    { serviceNumber: "SRV-2026-0001", title: "استشارة قانونية حول عقد توريد", serviceType: "legal_consultation", clientId: companyClientOne.id, assignedToId: lamia.id, status: "in_progress", fee: 3000 },
+    { serviceNumber: "SRV-2026-0002", title: "تأسيس شركة ذات مسؤولية محدودة", serviceType: "company_formation", clientId: companyClientTwo.id, assignedToId: omar.id, status: "new", fee: 12000 },
+    { serviceNumber: "SRV-2026-0003", title: "توثيق عقد إيجار تجاري", serviceType: "documentation", clientId: individualClient.id, assignedToId: sahar.id, status: "under_review", fee: 1500 },
+    { serviceNumber: "SRV-2026-0004", title: "طلب تنفيذ سند لأمر", serviceType: "execution_request", clientId: individualClient.id, assignedToId: lamia.id, status: "pending_client", fee: 2500 },
+    { serviceNumber: "SRV-2026-0005", title: "صياغة عقد شراكة", serviceType: "contract_drafting", clientId: companyClientOne.id, assignedToId: omar.id, status: "completed", fee: 6000 },
+  ];
+  for (const s of serviceSeed) {
+    const existing = await prisma.legalService.findUnique({ where: { serviceNumber: s.serviceNumber } });
+    if (!existing) {
+      await prisma.legalService.create({
+        data: {
+          serviceNumber: s.serviceNumber,
+          title: s.title,
+          serviceType: s.serviceType,
+          description: `${s.title} — خدمة قانونية غير متقاضية.`,
+          clientId: s.clientId,
+          assignedToId: s.assignedToId,
+          status: s.status,
+          fee: s.fee ?? null,
+          createdById: anas.id,
+          ...(s.status === "completed" ? { completedAt: new Date() } : {}),
+        },
+      });
+    }
+  }
+
+  // ===== مهام بعدة مُسندين (3) =====
+  const multiTaskSeed: { taskNumber: string; title: string; category: "research" | "document_preparation" | "meeting"; caseId: string; assignees: string[] }[] = [
+    { taskNumber: "TSK-2026-0011", title: "إعداد مذكرة مشتركة — نزاع المقاولة", category: "research", caseId: commercialCase.id, assignees: [lamia.id, sultan.id, omar.id] },
+    { taskNumber: "TSK-2026-0012", title: "مراجعة مستندات القضية العمالية", category: "document_preparation", caseId: laborCase.id, assignees: [sahar.id, yazid.id] },
+    { taskNumber: "TSK-2026-0013", title: "اجتماع تحضيري لجلسة الاستئناف", category: "meeting", caseId: commercialCase.id, assignees: [lamia.id, anas.id] },
+  ];
+  for (const t of multiTaskSeed) {
+    const existing = await prisma.task.findUnique({ where: { taskNumber: t.taskNumber } });
+    if (!existing) {
+      await prisma.task.create({
+        data: {
+          taskNumber: t.taskNumber,
+          title: t.title,
+          category: t.category,
+          priority: "normal",
+          assignedToId: t.assignees[0],
+          assignedById: anas.id,
+          caseId: t.caseId,
+          assignees: { create: t.assignees.map((userId) => ({ userId })) },
+        },
+      });
+    }
+  }
+
+  // ===== جلستان عن بُعد + جلسة بعد 5 أيام =====
+  const remoteSessionSeed: { caseId: string; sessionType: "hearing" | "negotiation_meeting"; daysFromNow: number; mode: "remote" | "hybrid"; platform: "zoom" | "google_meet"; link: string }[] = [
+    { caseId: commercialCase.id, sessionType: "hearing", daysFromNow: 3, mode: "remote", platform: "zoom", link: "https://zoom.us/j/1234567890" },
+    { caseId: laborCase.id, sessionType: "negotiation_meeting", daysFromNow: 5, mode: "remote", platform: "google_meet", link: "https://meet.google.com/abc-defg-hij" },
+  ];
+  for (const rs of remoteSessionSeed) {
+    const existing = await prisma.session.findFirst({ where: { meetingLink: rs.link } });
+    if (!existing) {
+      const d = new Date(Date.now() + rs.daysFromNow * 24 * 3600 * 1000);
+      await prisma.session.create({
+        data: {
+          caseId: rs.caseId,
+          sessionType: rs.sessionType,
+          sessionDate: d,
+          hijriDate: null,
+          sessionMode: rs.mode,
+          meetingLink: rs.link,
+          meetingPlatform: rs.platform,
+        },
+      });
+    }
+  }
+
   // ===== تفضيلات الإشعارات الافتراضية لكل المستخدمين (كل نوع → داخل النظام) =====
   const allUsersForPrefs = await prisma.user.findMany({ select: { id: true } });
   await prisma.notificationPreference.createMany({

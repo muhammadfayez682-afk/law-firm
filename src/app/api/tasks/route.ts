@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
 import { canAssignTaskTo, taskVisibilityWhere } from "@/lib/tasks";
+import { canAccessService } from "@/lib/services";
 import { notify } from "@/lib/notifications/send";
 
 const CATEGORIES: TaskCategory[] = [
@@ -94,10 +95,18 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const category = body.category as TaskCategory;
-  const assignedToId = typeof body.assignedToId === "string" ? body.assignedToId : "";
   const priority = (body.priority as TaskPriority) || "normal";
   const caseId: string | null = body.caseId || null;
+  const serviceId: string | null = body.serviceId || null;
   const intakeId: string | null = body.intakeId || null;
+
+  // المُسندون: قائمة (تعدّد) مع سقوط احتياطي لـ assignedToId المفرد للتوافق.
+  const rawAssignees: string[] = Array.isArray(body.assigneeIds)
+    ? body.assigneeIds.filter((x: unknown): x is string => typeof x === "string")
+    : typeof body.assignedToId === "string" && body.assignedToId
+      ? [body.assignedToId]
+      : [];
+  const assigneeIds = [...new Set(rawAssignees)];
 
   if (!title) return NextResponse.json({ error: "عنوان المهمة مطلوب" }, { status: 400 });
   if (!category || !CATEGORIES.includes(category)) {
@@ -106,38 +115,42 @@ export async function POST(request: NextRequest) {
   if (!PRIORITIES.includes(priority)) {
     return NextResponse.json({ error: "أولوية غير صالحة" }, { status: 400 });
   }
-  if (!assignedToId) {
-    return NextResponse.json({ error: "يجب تحديد الموظف المسند إليه" }, { status: 400 });
+  if (assigneeIds.length === 0) {
+    return NextResponse.json({ error: "يجب تحديد مُسند واحد على الأقل" }, { status: 400 });
+  }
+  // ربط واحد فقط بين قضية/خدمة/طلب.
+  if ([caseId, serviceId, intakeId].filter(Boolean).length > 1) {
+    return NextResponse.json({ error: "يُسمح بربط المهمة بقضية أو خدمة أو طلب واحد فقط" }, { status: 400 });
   }
 
-  // تحقّق أن المسند إليه موظف نشط.
-  const assignee = await prisma.user.findUnique({
-    where: { id: assignedToId },
-    select: { id: true, isActive: true },
-  });
-  if (!assignee || !assignee.isActive) {
-    return NextResponse.json({ error: "الموظف المسند إليه غير صالح" }, { status: 400 });
-  }
-  if (!(await canAssignTaskTo(prisma, session.user, assignedToId))) {
-    return NextResponse.json({ error: "لا تملك صلاحية الإسناد لهذا الموظف" }, { status: 403 });
+  // تحقّق كل مُسند: نشط + صلاحية الإسناد إليه.
+  for (const uid of assigneeIds) {
+    const u = await prisma.user.findUnique({ where: { id: uid }, select: { id: true, isActive: true } });
+    if (!u || !u.isActive) {
+      return NextResponse.json({ error: "أحد الموظفين المسند إليهم غير صالح" }, { status: 400 });
+    }
+    if (!(await canAssignTaskTo(prisma, session.user, uid))) {
+      return NextResponse.json({ error: "لا تملك صلاحية الإسناد لأحد الموظفين المختارين" }, { status: 403 });
+    }
   }
 
-  // تحقّق صلاحية الوصول للقضية/الطلب المرتبط إن وُجد.
+  // تحقّق صلاحية الوصول للكيان المرتبط.
   if (caseId) {
-    const caseData = await prisma.case.findUnique({
-      where: { id: caseId },
-      include: { team: true, accessOverrides: true },
-    });
+    const caseData = await prisma.case.findUnique({ where: { id: caseId }, include: { team: true, accessOverrides: true } });
     if (!caseData) return NextResponse.json({ error: "القضية غير موجودة" }, { status: 404 });
     if (!canAccessCase(session.user, caseData)) {
       return NextResponse.json({ error: "لا تملك صلاحية الوصول لهذه القضية" }, { status: 403 });
     }
   }
+  if (serviceId) {
+    const svc = await prisma.legalService.findUnique({ where: { id: serviceId }, select: { id: true, assignedToId: true, createdById: true } });
+    if (!svc) return NextResponse.json({ error: "الخدمة غير موجودة" }, { status: 404 });
+    if (!canAccessService(session.user, svc)) {
+      return NextResponse.json({ error: "لا تملك صلاحية الوصول لهذه الخدمة" }, { status: 403 });
+    }
+  }
   if (intakeId) {
-    const intake = await prisma.intakeRequest.findUnique({
-      where: { id: intakeId },
-      select: { id: true, receivedById: true },
-    });
+    const intake = await prisma.intakeRequest.findUnique({ where: { id: intakeId }, select: { id: true, receivedById: true } });
     if (!intake) return NextResponse.json({ error: "طلب الاستلام غير موجود" }, { status: 404 });
     if (!canAccessIntake(session.user, intake)) {
       return NextResponse.json({ error: "لا تملك صلاحية الوصول لطلب الاستلام" }, { status: 403 });
@@ -156,35 +169,32 @@ export async function POST(request: NextRequest) {
       data: {
         taskNumber,
         title,
-        description: typeof body.description === "string" && body.description.trim()
-          ? body.description.trim()
-          : null,
+        description: typeof body.description === "string" && body.description.trim() ? body.description.trim() : null,
         category,
         priority,
-        assignedToId,
+        assignedToId: assigneeIds[0], // المُسند الرئيسي (للتوافق)
         assignedById: session.user.id,
         caseId,
+        serviceId,
         intakeId,
         dueDate,
+        assignees: { create: assigneeIds.map((userId) => ({ userId })) },
       },
     });
   });
 
   await prisma.auditLog.create({
-    data: {
-      userId: session.user.id,
-      action: "create",
-      resourceType: "Task",
-      resourceId: created.id,
-    },
+    data: { userId: session.user.id, action: "create", resourceType: "Task", resourceId: created.id },
   });
 
-  // إشعار المسند إليه (إن كان غير المُنشئ).
-  if (created.assignedToId !== session.user.id) {
+  // إشعار كل مُسند (عدا المُنشئ).
+  const notifPriority = priority === "urgent" ? "urgent" : priority === "high" ? "high" : "normal";
+  for (const uid of assigneeIds) {
+    if (uid === session.user.id) continue;
     await notify({
-      recipientId: created.assignedToId,
+      recipientId: uid,
       type: "task_assigned",
-      priority: created.priority === "urgent" ? "urgent" : created.priority === "high" ? "high" : "normal",
+      priority: notifPriority,
       title: "أُسندت إليك مهمة",
       message: `المهمة «${created.title}» (${created.taskNumber}).`,
       actionUrl: `/tasks/${created.id}`,

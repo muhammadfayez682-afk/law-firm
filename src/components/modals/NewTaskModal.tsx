@@ -18,21 +18,30 @@ export function NewTaskModal({
   users,
   cases = [],
   intakes = [],
+  services = [],
   presetCaseId = null,
   presetIntakeId = null,
+  presetServiceId = null,
   currentUserId,
   onClose,
 }: {
   users: { id: string; fullName: string; role?: UserRole }[];
   cases?: { id: string; internalNumber: string; title: string }[];
   intakes?: { id: string; requestNumber: string }[];
+  services?: { id: string; serviceNumber: string; title: string }[];
   presetCaseId?: string | null;
   presetIntakeId?: string | null;
+  presetServiceId?: string | null;
   currentUserId: string;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([currentUserId]);
+
+  function toggleAssignee(uid: string) {
+    setAssigneeIds((prev) => (prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]));
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,6 +49,10 @@ export function NewTaskModal({
     const title = (fd.get("title") as string)?.trim();
     if (!title) {
       toast.error("عنوان المهمة مطلوب");
+      return;
+    }
+    if (assigneeIds.length === 0) {
+      toast.error("اختر مُسندًا واحدًا على الأقل");
       return;
     }
     setLoading(true);
@@ -51,9 +64,10 @@ export function NewTaskModal({
           title,
           description: fd.get("description") || null,
           category: fd.get("category"),
-          assignedToId: fd.get("assignedToId"),
+          assigneeIds,
           priority: fd.get("priority"),
           caseId: presetCaseId ?? fd.get("caseId") ?? null,
+          serviceId: presetServiceId ?? fd.get("serviceId") ?? null,
           intakeId: presetIntakeId ?? fd.get("intakeId") ?? null,
           dueDate: fd.get("dueDate") || null,
         }),
@@ -124,16 +138,20 @@ export function NewTaskModal({
 
           <div>
             <label className={labelClass}>
-              المسند إليه <span className="text-red-600">*</span>
+              المُسندون <span className="text-red-600">*</span>{" "}
+              <span className="text-xs text-foreground/50">({assigneeIds.length} مختار)</span>
             </label>
-            <select name="assignedToId" required defaultValue={currentUserId} className={inputClass}>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-black/10 p-2">
               {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.fullName}
-                  {u.id === currentUserId ? " (أنا)" : ""}
-                </option>
+                <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-black/5">
+                  <input type="checkbox" checked={assigneeIds.includes(u.id)} onChange={() => toggleAssignee(u.id)} />
+                  <span>
+                    {u.fullName}
+                    {u.id === currentUserId ? " (أنا)" : ""}
+                  </span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
 
           {!presetCaseId && cases.length > 0 && (
@@ -158,6 +176,20 @@ export function NewTaskModal({
                 {intakes.map((it) => (
                   <option key={it.id} value={it.id}>
                     {it.requestNumber}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!presetServiceId && services.length > 0 && (
+            <div>
+              <label className={labelClass}>ربط بخدمة قانونية</label>
+              <select name="serviceId" defaultValue="" className={inputClass}>
+                <option value="">بدون خدمة</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.serviceNumber} — {s.title}
                   </option>
                 ))}
               </select>

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { caseVisibilityWhere, type SessionUser } from "@/lib/rbac";
 import { intakeVisibilityWhere } from "@/lib/intake";
+import { serviceVisibilityWhere } from "@/lib/services";
 import {
   displayTaskStatus,
   getAssignableUsers,
@@ -70,7 +71,7 @@ export default async function TasksPage({
     });
   }
 
-  const [tasks, assignableUsers, cases, intakes] = await Promise.all([
+  const [tasks, assignableUsers, cases, intakes, services] = await Promise.all([
     prisma.task.findMany({
       where: { AND: filters },
       orderBy: [{ createdAt: "desc" }],
@@ -91,6 +92,11 @@ export default async function TasksPage({
       where: { ...intakeVisibilityWhere(session.user), status: { notIn: ["accepted", "rejected", "cancelled"] } },
       orderBy: { receivedAt: "desc" },
       select: { id: true, requestNumber: true },
+    }),
+    prisma.legalService.findMany({
+      where: serviceVisibilityWhere(session.user),
+      orderBy: { createdAt: "desc" },
+      select: { id: true, serviceNumber: true, title: true },
     }),
   ]);
 
@@ -123,6 +129,7 @@ export default async function TasksPage({
           users={assignableUsers}
           cases={cases}
           intakes={intakes}
+          services={services}
           currentUserId={session.user.id}
         />
       </div>
@@ -148,15 +155,16 @@ export default async function TasksPage({
 
 async function buildSummary(user: SessionUser, now: Date) {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const mineWhere = { OR: [{ assignedToId: user.id }, { assignees: { some: { userId: user.id } } }] };
   const [myPending, overdue, completedThisWeek, assignedByMe] = await Promise.all([
     prisma.task.count({
-      where: { assignedToId: user.id, status: { in: ["pending", "in_progress"] } },
+      where: { ...mineWhere, status: { in: ["pending", "in_progress"] } },
     }),
     prisma.task.count({
-      where: { assignedToId: user.id, status: { in: ["pending", "in_progress"] }, dueDate: { lt: now } },
+      where: { ...mineWhere, status: { in: ["pending", "in_progress"] }, dueDate: { lt: now } },
     }),
     prisma.task.count({
-      where: { assignedToId: user.id, status: "completed", completedAt: { gte: weekAgo } },
+      where: { ...mineWhere, status: "completed", completedAt: { gte: weekAgo } },
     }),
     prisma.task.count({
       where: { assignedById: user.id, assignedToId: { not: user.id }, status: { not: "cancelled" } },

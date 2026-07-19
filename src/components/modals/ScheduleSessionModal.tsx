@@ -3,7 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { SessionType } from "@prisma/client";
+import type { SessionMode, SessionPlatform, SessionType } from "@prisma/client";
+
+const PLATFORM_OPTIONS: { value: SessionPlatform; label: string }[] = [
+  { value: "zoom", label: "Zoom" },
+  { value: "google_meet", label: "Google Meet" },
+  { value: "microsoft_teams", label: "Microsoft Teams" },
+  { value: "najiz", label: "ناجز" },
+  { value: "qiwa", label: "قوى" },
+  { value: "taradhi", label: "تراضي" },
+  { value: "other", label: "أخرى" },
+];
 
 const SESSION_TYPE_OPTIONS: { value: SessionType; label: string }[] = [
   { value: "hearing", label: "مرافعة" },
@@ -38,13 +48,30 @@ export function ScheduleSessionModal({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<SessionMode>("in_person");
+  const isRemote = mode === "remote" || mode === "hybrid";
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    const meetingLink = (formData.get("meetingLink") as string)?.trim() || null;
+
+    if (isRemote) {
+      if (!meetingLink) {
+        setError("رابط الاجتماع إلزامي للجلسات عن بُعد.");
+        return;
+      }
+      try {
+        new URL(meetingLink);
+      } catch {
+        setError("رابط الاجتماع غير صالح (يجب أن يبدأ بـ https://).");
+        return;
+      }
+    }
+
+    setLoading(true);
     const payload = {
       caseId,
       sessionType: formData.get("sessionType"),
@@ -53,6 +80,10 @@ export function ScheduleSessionModal({
       reminderBefore: formData.get("reminderBefore")
         ? Number(formData.get("reminderBefore"))
         : null,
+      sessionMode: mode,
+      meetingLink: isRemote ? meetingLink : null,
+      meetingPlatform: isRemote ? formData.get("meetingPlatform") : null,
+      meetingPassword: isRemote ? (formData.get("meetingPassword") as string)?.trim() || null : null,
     };
 
     try {
@@ -147,6 +178,46 @@ export function ScheduleSessionModal({
               className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold"
             />
           </div>
+
+          {/* نمط الجلسة */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-navy">نمط الجلسة</label>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { v: "in_person", l: "حضوري" },
+                { v: "remote", l: "عن بُعد" },
+                { v: "hybrid", l: "مختلط" },
+              ] as const).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => setMode(o.v)}
+                  className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${mode === o.v ? "bg-navy text-white" : "border border-black/10 text-navy hover:bg-black/5"}`}
+                >
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {isRemote && (
+            <div className="space-y-3 rounded-lg border border-taradhi/20 bg-taradhi/5 p-3">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-navy">المنصة</label>
+                <select name="meetingPlatform" defaultValue="zoom" className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold">
+                  {PLATFORM_OPTIONS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-navy">رابط الاجتماع <span className="text-red-600">*</span></label>
+                <input name="meetingLink" type="url" dir="ltr" placeholder="https://..." className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-navy">كلمة مرور الاجتماع (اختياري)</label>
+                <input name="meetingPassword" dir="ltr" className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold" />
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-navy">التذكير قبل</label>
