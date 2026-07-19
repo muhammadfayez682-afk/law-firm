@@ -29,6 +29,10 @@ import { NewTaskModal } from "@/components/modals/NewTaskModal";
 import { EditCourtNumberModal } from "@/components/modals/EditCourtNumberModal";
 import { AddAgencyModal } from "@/components/modals/AddAgencyModal";
 import { CaseNumberDisplay } from "@/components/cases/CaseNumberDisplay";
+import { EditEntityModal, type EditableFieldDescriptor } from "@/components/shared/EditEntityModal";
+import { EntityChangeLog } from "@/components/shared/EntityChangeLog";
+import { canEditField } from "@/lib/editPermissions";
+import { CLIENT_PARTY_ROLE_OPTIONS } from "@/lib/parties";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
 import { MEMO_STATUS_LABELS_AR, MEMO_STATUS_STYLES } from "@/lib/memos";
@@ -131,6 +135,11 @@ const CASE_QUICK_TEMPLATES: { key: string; label: string }[] = [
   { key: "case_analysis", label: "تحليل قضية" },
 ];
 
+/** يحوّل نتيجة canEditField إلى وصف قفل الحقل للمودال. */
+function lockState(check: { allowed: boolean; reason?: string }): { locked: boolean; lockReason?: string } {
+  return check.allowed ? { locked: false } : { locked: true, lockReason: check.reason };
+}
+
 export function CaseDetailView({
   caseData,
   canEdit,
@@ -138,6 +147,7 @@ export function CaseDetailView({
   firstStage,
   settlementPlatform,
   currentUserId,
+  userRole,
   isSystemAdmin,
   memos,
   canAddMemo,
@@ -151,6 +161,7 @@ export function CaseDetailView({
   firstStage: CaseFlowStage | null;
   settlementPlatform: SettlementPlatform | null;
   currentUserId: string;
+  userRole: UserRole;
   isSystemAdmin: boolean;
   memos: CaseMemo[];
   canAddMemo: boolean;
@@ -164,6 +175,46 @@ export function CaseDetailView({
   const [showNewTask, setShowNewTask] = useState(false);
   const [showCourtNumberModal, setShowCourtNumberModal] = useState(false);
   const [showAddAgency, setShowAddAgency] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  // بناء حقول التعديل الموحّد مع حالة القفل حسب دور المستخدم وحالة القضية.
+  const lock = (field: string) => canEditField("case", field, userRole, { status: caseData.status });
+  const editFields: EditableFieldDescriptor[] = [
+    { name: "title", label: "عنوان القضية", type: "text", value: caseData.title, ...lockState(lock("title")) },
+    { name: "internalNumber", label: "الرقم الداخلي", type: "text", value: caseData.internalNumber, ...lockState(lock("internalNumber")) },
+    { name: "courtCaseNumber", label: "رقم القضية بالمحكمة", type: "text", value: caseData.courtCaseNumber ?? "", ...lockState(lock("courtCaseNumber")) },
+    { name: "courtName", label: "المحكمة", type: "text", value: caseData.courtName ?? "", ...lockState(lock("courtName")) },
+    {
+      name: "caseType",
+      label: "نوع القضية",
+      type: "select",
+      value: caseData.caseType,
+      options: Object.entries(CASE_TYPE_LABELS_AR).map(([value, label]) => ({ value, label })),
+      ...lockState(lock("caseType")),
+    },
+    { name: "claimValue", label: "قيمة المطالبة", type: "number", value: caseData.claimValue != null ? String(caseData.claimValue) : "", ...lockState(lock("claimValue")) },
+    {
+      name: "priority",
+      label: "الأولوية",
+      type: "select",
+      value: caseData.priority,
+      options: [
+        { value: "normal", label: "عادية" },
+        { value: "high", label: "عالية" },
+        { value: "urgent", label: "عاجلة" },
+      ],
+      ...lockState(lock("priority")),
+    },
+    {
+      name: "clientPartyRole",
+      label: "صفة موكّلنا",
+      type: "select",
+      value: caseData.clientPartyRole ?? "",
+      options: CLIENT_PARTY_ROLE_OPTIONS.map((r) => ({ value: r, label: PARTY_ROLE_LABELS_AR[r] })),
+      ...lockState(lock("clientPartyRole")),
+    },
+    { name: "notes", label: "الملاحظات", type: "textarea", value: caseData.notes ?? "", ...lockState(lock("notes")) },
+  ];
 
   const canRequestClosure =
     caseData.responsibleLawyerId === currentUserId && canTransitionToPendingClosure(caseData.status);
@@ -228,7 +279,14 @@ export function CaseDetailView({
         </div>
 
         {canEdit && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="rounded-lg border border-navy px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"
+            >
+              تعديل البيانات
+            </button>
             <button
               type="button"
               onClick={() => setShowUploadModal(true)}
@@ -685,6 +743,8 @@ export function CaseDetailView({
         </div>
       </div>
 
+      <EntityChangeLog entityType="case" entityId={caseData.id} />
+
       {showScheduleModal && (
         <ScheduleSessionModal
           caseId={caseData.id}
@@ -720,6 +780,16 @@ export function CaseDetailView({
       )}
       {showAddAgency && (
         <AddAgencyModal caseId={caseData.id} onClose={() => setShowAddAgency(false)} />
+      )}
+      {showEditModal && (
+        <EditEntityModal
+          entityType="case"
+          entityId={caseData.id}
+          apiPath={`/api/cases/${caseData.id}`}
+          title="تعديل بيانات القضية"
+          fields={editFields}
+          onClose={() => setShowEditModal(false)}
+        />
       )}
     </div>
   );

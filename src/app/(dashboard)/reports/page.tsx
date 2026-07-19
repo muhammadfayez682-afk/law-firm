@@ -1,6 +1,7 @@
+import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { isManagement } from "@/lib/rbac";
+import { isManagement, isSystemAdmin } from "@/lib/rbac";
 import { getReportsStats } from "@/lib/reports-stats";
 import { formatCurrency } from "@/lib/formatNumber";
 
@@ -38,9 +39,19 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-amiri text-2xl font-bold text-navy">التقارير والأداء</h1>
-        <p className="text-sm text-foreground/60">نظرة تحليلية على أداء المكتب</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="font-amiri text-2xl font-bold text-navy">التقارير والأداء</h1>
+          <p className="text-sm text-foreground/60">نظرة تحليلية على أداء المكتب</p>
+        </div>
+        {isSystemAdmin(session.user.role) && (
+          <Link
+            href="/reports/changes"
+            className="rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"
+          >
+            تقرير التعديلات ←
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -8,6 +8,8 @@ import { canAccessClient } from "@/lib/rbac";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { formatDualDate } from "@/lib/dateUtils";
 import { toEnglishDigits } from "@/lib/formatNumber";
+import { EntityChangeLog } from "@/components/shared/EntityChangeLog";
+import { ClientEditButton } from "./ClientEditButton";
 
 const CLOSED_STATUSES: CaseStatus[] = ["closed", "archived"];
 const EXPIRY_WARNING_DAYS = 30;
@@ -54,18 +56,34 @@ export default async function ClientDetailPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-xs text-foreground/50">
-          {CLIENT_TYPE_LABELS_AR[client.type]}
-        </p>
-        <h1 className="font-amiri text-2xl font-bold text-navy">{client.fullName}</h1>
-        <span
-          className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-            isActive ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"
-          }`}
-        >
-          {isActive ? "نشط" : "غير نشط"}
-        </span>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs text-foreground/50">
+            {CLIENT_TYPE_LABELS_AR[client.type]}
+          </p>
+          <h1 className="font-amiri text-2xl font-bold text-navy">{client.fullName}</h1>
+          <span
+            className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+              isActive ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {isActive ? "نشط" : "غير نشط"}
+          </span>
+        </div>
+        {session.user.role !== "accountant" && (
+          <ClientEditButton
+            client={{
+              id: client.id,
+              type: client.type,
+              fullName: client.fullName,
+              nationalIdOrCr: client.nationalIdOrCr,
+              phone: client.phone,
+              email: client.email,
+              representativeName: client.representativeName,
+            }}
+            userRole={session.user.role}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -191,6 +209,10 @@ export default async function ClientDetailPage({
           </section>
         </div>
       </div>
+
+      {session.user.role !== "accountant" && (
+        <EntityChangeLog entityType="client" entityId={client.id} />
+      )}
     </div>
   );
 }

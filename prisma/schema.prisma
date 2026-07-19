@@ -53,6 +53,7 @@ model User {
   notifications           Notification[]           @relation("NotificationRecipient")
   triggeredNotifications  Notification[]           @relation("NotificationTrigger")
   notificationPreferences NotificationPreference[]
+  entityChanges           EntityChangeLog[]
 
   @@map("users")
 }
@@ -555,6 +556,11 @@ model LegalMemo {
 
   reviews MemoReview[]
 
+  // النسخ التكميلية: المذكرات المعتمدة/المُقدّمة لا تُعدّل — تُصدَر نسخة تكميلية جديدة تشير للأصل.
+  parentMemoId String?
+  parent       LegalMemo?  @relation("MemoVersions", fields: [parentMemoId], references: [id])
+  supplements  LegalMemo[] @relation("MemoVersions")
+
   @@map("legal_memos")
 }
 
@@ -905,4 +911,40 @@ model NotificationPreference {
 
   @@unique([userId, type])
   @@map("notification_preferences")
+}
+
+enum ChangeReason {
+  data_entry_error // خطأ إدخال
+  official_update // تحديث رسمي (من المحكمة، ناجز...)
+  client_information_change // العميل غيّر بياناته
+  legal_correction // تصحيح قانوني
+  system_migration // نقل بيانات
+  other // أخرى
+}
+
+// سجل تعديلات موحّد لكل الكيانات — يوثّق كل تغيير حقل مع سببه وشرحه الإلزامي.
+model EntityChangeLog {
+  id         String @id @default(uuid())
+  entityType String // "case" | "client" | "agency" | "party" | "intake" | "memo"
+  entityId   String
+
+  fieldName  String // اسم الحقل المُعدَّل
+  fieldLabel String // اسمه بالعربي للعرض
+
+  oldValue String? @db.Text // القيمة السابقة (JSON إذا معقّد)
+  newValue String? @db.Text // القيمة الجديدة
+
+  changedBy    User         @relation(fields: [changedById], references: [id])
+  changedById  String
+  changeReason ChangeReason
+  reasonNote   String       @db.Text // شرح إلزامي (30 حرفًا على الأقل)
+
+  changedAt DateTime @default(now())
+  ipAddress String?
+
+  batchId String? // يجمع الحقول المُعدَّلة في عملية واحدة
+
+  @@index([entityType, entityId, changedAt])
+  @@index([changedById, changedAt])
+  @@map("entity_change_log")
 }

@@ -13,6 +13,7 @@ import {
 import { formatDualDateTime } from "@/lib/dateUtils";
 import { MemoForm } from "../MemoForm";
 import { MemoActions } from "./MemoActions";
+import { SupplementButton } from "./SupplementButton";
 
 export default async function MemoDetailPage({
   params,
@@ -39,6 +40,10 @@ export default async function MemoDetailPage({
 
   const editable = canEditMemo(session.user, memo);
   const reviewer = canReviewMemo(session.user.role);
+  const canSupplement =
+    (memo.status === "approved" || memo.status === "submitted_to_court") &&
+    session.user.role !== "accountant" &&
+    session.user.role !== "secretary";
 
   return (
     <div className="space-y-6">
@@ -67,6 +72,9 @@ export default async function MemoDetailPage({
 
       {/* لوحة إجراءات المحامي (مراجعة/تقديم) */}
       <MemoActions memoId={memo.id} status={memo.status} canReview={reviewer} />
+
+      {/* نسخة معدّلة للمذكرات المعتمدة/المُقدّمة */}
+      {canSupplement && <SupplementButton memoId={memo.id} />}
 
       {editable ? (
         <MemoForm

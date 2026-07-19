@@ -86,6 +86,7 @@ export default async function CaseDetailPage({
       firstStage={firstStage}
       settlementPlatform={settlementPlatform}
       currentUserId={session.user.id}
+      userRole={session.user.role}
       isSystemAdmin={isSystemAdmin(session.user.role)}
       memos={memos}
       canAddMemo={canAuthorMemo(session.user.role)}
