@@ -1,0 +1,21 @@
+# لا تنسخ هذه إلى سياق البناء / صورة Docker
+node_modules
+.next
+.git
+.gitignore
+
+# ⚠️ لا تُدرج أسرار البيئة داخل الصورة أبدًا
+.env
+.env.*
+!.env.example
+
+# مخرجات وتطوير
+npm-debug.log*
+*.log
+.DS_Store
+.vscode
+.idea
+
+# مستندات مرفوعة محليًا (تخزين عابر — لا تُنقل للصورة)
+public/uploads/*
+!public/uploads/.gitkeep
