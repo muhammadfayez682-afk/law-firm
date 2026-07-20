@@ -30,6 +30,7 @@ type SearchParams = {
   caseType?: string;
   lawyerId?: string;
   page?: string;
+  view?: string;
 };
 
 export default async function CasesPage({
@@ -42,12 +43,16 @@ export default async function CasesPage({
 
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? "1") || 1);
+  const isAdmin = session.user.role === "system_admin";
+  // العرض المحذوف مقيّد بمسؤول النظام.
+  const view = params.view === "archived" ? "archived" : params.view === "deleted" && isAdmin ? "deleted" : "active";
 
   const where = buildCasesWhere(session.user, {
     q: params.q,
     status: params.status,
     caseType: params.caseType,
     lawyerId: params.lawyerId,
+    view,
   });
 
   const [cases, total, clients, lawyers] = await Promise.all([
@@ -74,6 +79,22 @@ export default async function CasesPage({
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          { v: "active", l: "نشطة" },
+          { v: "archived", l: "🗄️ مؤرشفة" },
+          ...(isAdmin ? [{ v: "deleted", l: "🗑️ محذوفة" }] : []),
+        ] as const).map((t) => (
+          <Link
+            key={t.v}
+            href={t.v === "active" ? "/cases" : `/cases?view=${t.v}`}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${view === t.v ? "bg-navy text-white" : "border border-black/10 text-navy hover:bg-black/5"}`}
+          >
+            {t.l}
+          </Link>
+        ))}
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-amiri text-2xl font-bold text-navy">القضايا</h1>

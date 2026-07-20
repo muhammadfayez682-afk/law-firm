@@ -12,6 +12,9 @@ export async function getReportsStats() {
   const now = new Date();
   const { start: monthStart, end: monthEnd } = getMonthRange(now);
 
+  // التقارير تستثني القضايا المؤرشفة والمحذوفة (حذف ناعم) من الإحصاءات الحيّة.
+  const notArchived = { deletedAt: null, NOT: { status: "archived" as const } };
+
   const [
     closedThisMonth,
     closedCasesCount,
@@ -20,6 +23,8 @@ export async function getReportsStats() {
     dueInvoices,
     caseTypeCounts,
     totalCases,
+    archivedCount,
+    deletedCount,
     lawyers,
   ] = await Promise.all([
     prisma.case.count({
@@ -37,8 +42,10 @@ export async function getReportsStats() {
       _sum: { amount: true },
       _count: true,
     }),
-    prisma.case.groupBy({ by: ["caseType"], _count: true }),
-    prisma.case.count(),
+    prisma.case.groupBy({ by: ["caseType"], _count: true, where: notArchived }),
+    prisma.case.count({ where: notArchived }),
+    prisma.case.count({ where: { status: "archived", deletedAt: null } }),
+    prisma.case.count({ where: { deletedAt: { not: null } } }),
     prisma.user.findMany({
       where: { role: { in: CASE_HANDLER_ROLES } },
       orderBy: { fullName: "asc" },
@@ -113,7 +120,7 @@ export async function getReportsStats() {
 
   async function sideStats(roles: readonly string[]) {
     const [total, closed, closedWon] = await Promise.all([
-      prisma.case.count({ where: { clientPartyRole: { in: roles as never } } }),
+      prisma.case.count({ where: { clientPartyRole: { in: roles as never }, ...notArchived } }),
       prisma.case.count({ where: { clientPartyRole: { in: roles as never }, status: "closed" } }),
       prisma.case.count({
         where: {
@@ -161,6 +168,7 @@ export async function getReportsStats() {
     lawyerPerformance,
     partyRoleStats: { plaintiffSide, defendantSide },
     agencyReport,
+    archiveReport: { archivedCount, deletedCount },
   };
 }
 

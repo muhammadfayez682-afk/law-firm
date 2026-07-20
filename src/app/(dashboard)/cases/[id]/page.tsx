@@ -6,6 +6,7 @@ import { canAccessCase, canEditCase, isSystemAdmin } from "@/lib/rbac";
 import { getAmicableSettlementPlatform, getCaseFlowStages, getFirstStage } from "@/lib/caseFlow";
 import { canAuthorMemo, canReviewMemo } from "@/lib/memos";
 import { displayTaskStatus, getAssignableUsers } from "@/lib/tasks";
+import { canArchiveCase, canRestoreCase, checkDeleteEligibility } from "@/lib/caseArchive";
 import { CaseDetailView } from "./CaseDetailView";
 
 export default async function CaseDetailPage({
@@ -47,11 +48,31 @@ export default async function CaseDetailPage({
         orderBy: { createdAt: "desc" },
         include: { assignedTo: { select: { fullName: true } } },
       },
+      invoices: { select: { status: true } },
     },
   });
 
   if (!caseData) notFound();
   if (!canAccessCase(session.user, caseData)) notFound();
+  // القضايا المحذوفة (حذف ناعم) لا تُعرض إلا لمسؤول النظام.
+  if (caseData.deletedAt && !isSystemAdmin(session.user.role)) notFound();
+
+  // حالة الأرشفة/الحذف + الأهلية.
+  const heldSessionsCount = caseData.sessions.filter((s) => s.status === "held").length;
+  const paidInvoicesCount = caseData.invoices.filter((i) => i.status === "paid").length;
+  const archiveInfo = {
+    isArchived: caseData.status === "archived",
+    archivedAt: caseData.archivedAt?.toISOString() ?? null,
+    archiveReason: caseData.archiveReason,
+    canArchive: canArchiveCase(session.user, caseData),
+    canRestore: canRestoreCase(session.user) && caseData.status === "archived",
+    delete: checkDeleteEligibility(session.user, {
+      status: caseData.status,
+      archivedAt: caseData.archivedAt,
+      heldSessionsCount,
+      paidInvoicesCount,
+    }),
+  };
 
   const [flowStages, firstStage, taskUsers] = await Promise.all([
     getCaseFlowStages(caseData.caseType),
@@ -114,6 +135,7 @@ export default async function CaseDetailPage({
       pendingMemoReview={pendingMemoReview}
       tasks={tasks}
       taskUsers={taskUsers}
+      archiveInfo={archiveInfo}
     />
   );
 }

@@ -3,19 +3,34 @@ import { caseVisibilityWhere, type SessionUser } from "@/lib/rbac";
 
 export const CASES_PAGE_SIZE = 10;
 
+export type CaseView = "active" | "archived" | "deleted";
+
 export type CaseFilters = {
   q?: string | null;
   status?: string | null;
   caseType?: string | null;
   lawyerId?: string | null;
+  view?: CaseView | null;
 };
 
 export function buildCasesWhere(user: SessionUser, filters: CaseFilters): Prisma.CaseWhereInput {
-  const { q, status, caseType, lawyerId } = filters;
+  const { q, status, caseType, lawyerId, view } = filters;
+
+  // العرض: نشطة (افتراضي، تُستبعد المؤرشفة) | مؤرشفة | محذوفة (مسؤول النظام).
+  let viewWhere: Prisma.CaseWhereInput;
+  if (view === "archived") {
+    viewWhere = { ...caseVisibilityWhere(user), status: "archived" };
+  } else if (view === "deleted") {
+    // القضايا المحذوفة (حذف ناعم) — لمسؤول النظام؛ نتجاوز deletedAt:null.
+    viewWhere = { deletedAt: { not: null } };
+  } else {
+    // النشطة: كل شيء عدا المؤرشفة (والمحذوفة مُستبعدة أصلًا في caseVisibilityWhere).
+    viewWhere = { ...caseVisibilityWhere(user), NOT: { status: "archived" } };
+  }
 
   return {
-    ...caseVisibilityWhere(user),
-    ...(status ? { status: status as CaseStatus } : {}),
+    ...viewWhere,
+    ...(status && view !== "archived" ? { status: status as CaseStatus } : {}),
     ...(caseType ? { caseType: caseType as CaseType } : {}),
     ...(lawyerId ? { responsibleLawyerId: lawyerId } : {}),
     ...(q

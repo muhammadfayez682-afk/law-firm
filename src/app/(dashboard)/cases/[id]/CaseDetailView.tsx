@@ -30,6 +30,7 @@ import { EditCourtNumberModal } from "@/components/modals/EditCourtNumberModal";
 import { AddAgencyModal } from "@/components/modals/AddAgencyModal";
 import { CaseNumberDisplay } from "@/components/cases/CaseNumberDisplay";
 import { SessionPrepChecklist, type PrepTask } from "@/components/cases/SessionPrepChecklist";
+import { CaseArchiveActions, type ArchiveInfo } from "@/components/cases/CaseArchiveActions";
 import { EditEntityModal, type EditableFieldDescriptor } from "@/components/shared/EditEntityModal";
 import { EntityChangeLog } from "@/components/shared/EntityChangeLog";
 import { canEditField } from "@/lib/editPermissions";
@@ -155,6 +156,7 @@ export function CaseDetailView({
   pendingMemoReview,
   tasks,
   taskUsers,
+  archiveInfo,
 }: {
   caseData: FullCase;
   canEdit: boolean;
@@ -169,6 +171,7 @@ export function CaseDetailView({
   pendingMemoReview: number;
   tasks: CaseTask[];
   taskUsers: { id: string; fullName: string; role: UserRole }[];
+  archiveInfo: ArchiveInfo;
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -332,6 +335,14 @@ export function CaseDetailView({
           isSystemAdmin={isSystemAdmin}
         />
       )}
+
+      {/* الأرشفة / الاسترجاع / الحذف النهائي */}
+      <CaseArchiveActions
+        caseId={caseData.id}
+        title={caseData.title}
+        internalNumber={caseData.internalNumber}
+        info={archiveInfo}
+      />
 
       {/* بانر: القضية قيد إصدار الوكالة */}
       {isPendingAgency && (

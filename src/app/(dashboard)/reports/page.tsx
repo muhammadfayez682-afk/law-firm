@@ -162,6 +162,27 @@ export default async function ReportsPage() {
       </div>
 
       <div className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
+        <h2 className="mb-4 font-semibold text-navy">الأرشيف</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+            <p className="text-xs text-foreground/60">قضايا مؤرشفة</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-gray-700">
+              {stats.archiveReport.archivedCount}
+            </p>
+          </div>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+            <p className="text-xs text-foreground/60">قضايا محذوفة (بانتظار الحذف النهائي)</p>
+            <p className="mt-1 font-amiri text-2xl font-bold text-red-700">
+              {stats.archiveReport.deletedCount}
+            </p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs text-foreground/50">
+          القضايا المؤرشفة والمحذوفة مستثناة من كل إحصاءات هذا التقرير.
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
         <h2 className="mb-4 font-semibold text-navy">توزيع القضايا حسب النوع</h2>
         <div className="space-y-3">
           {stats.caseTypeDistribution.map((c) => (

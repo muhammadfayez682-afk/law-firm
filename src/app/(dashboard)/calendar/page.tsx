@@ -2,8 +2,9 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessCase, caseVisibilityWhere, isManagement } from "@/lib/rbac";
+import { caseVisibilityWhere } from "@/lib/rbac";
 import { formatTime, getHijriMonthLabel } from "@/lib/dateUtils";
+import { dayStatus, isJudicialHoliday, addBusinessDays } from "@/lib/judicialCalendar";
 
 const SESSION_TYPE_LABELS_AR: Record<string, string> = {
   negotiation_meeting: "جلسة تسوية ودية",
@@ -82,15 +83,34 @@ export default async function CalendarPage({
     sessionsByDay.set(key, list);
   }
 
+  type QiwaAlert = {
+    caseId: string;
+    clientName: string;
+    daysLeft: number;
+    deadlineOnHoliday: string | null;
+    suggestedNextWorkingDay: string | null;
+  };
   const qiwaExpiring = laborCases
-    .map((c) => {
+    .map((c): QiwaAlert | null => {
       const deadline = c.amicableSettlement?.deadlineDate;
       if (!deadline) return null;
-      const daysLeft = Math.ceil((new Date(deadline).getTime() - now.getTime()) / MS_PER_DAY);
-      return { caseId: c.id, clientName: c.client.fullName, daysLeft };
+      const deadlineDate = new Date(deadline);
+      const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / MS_PER_DAY);
+      // مهلة التسوية الودية 21 يومًا — إن صادف انتهاؤها عطلة رسمية نبّه المستخدم.
+      const holiday = isJudicialHoliday(deadlineDate);
+      const nextWorking = holiday.isHoliday ? addBusinessDays(deadlineDate, 1) : null;
+      return {
+        caseId: c.id,
+        clientName: c.client.fullName,
+        daysLeft,
+        deadlineOnHoliday: holiday.isHoliday ? holiday.name ?? "عطلة رسمية" : null,
+        suggestedNextWorkingDay: nextWorking
+          ? nextWorking.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+          : null,
+      };
     })
-    .filter((c): c is { caseId: string; clientName: string; daysLeft: number } => c !== null)
-    .filter((c) => c.daysLeft < QIWA_ALERT_THRESHOLD_DAYS)
+    .filter((c): c is QiwaAlert => c !== null)
+    .filter((c) => c.daysLeft < QIWA_ALERT_THRESHOLD_DAYS || c.deadlineOnHoliday !== null)
     .sort((a, b) => a.daysLeft - b.daysLeft);
 
   return (
@@ -108,12 +128,22 @@ export default async function CalendarPage({
               <li key={item.caseId}>
                 <Link
                   href={`/cases/${item.caseId}`}
-                  className="flex items-center justify-between rounded-lg bg-white px-4 py-2.5 text-sm hover:bg-red-100/50"
+                  className="flex flex-col gap-1 rounded-lg bg-white px-4 py-2.5 text-sm hover:bg-red-100/50"
                 >
-                  <span className="font-medium text-navy">{item.clientName}</span>
-                  <span className="font-semibold text-red-600">
-                    {item.daysLeft > 0 ? `${item.daysLeft} أيام متبقية` : "انتهت المهلة"}
+                  <span className="flex items-center justify-between">
+                    <span className="font-medium text-navy">{item.clientName}</span>
+                    <span className="font-semibold text-red-600">
+                      {item.daysLeft > 0 ? `${item.daysLeft} أيام متبقية` : "انتهت المهلة"}
+                    </span>
                   </span>
+                  {item.deadlineOnHoliday && (
+                    <span className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                      🕌 تنتهي المهلة في عطلة رسمية ({item.deadlineOnHoliday})
+                      {item.suggestedNextWorkingDay
+                        ? ` — أنجِز الإجراء قبلها أو في أول يوم عمل (${item.suggestedNextWorkingDay})`
+                        : ""}
+                    </span>
+                  )}
                 </Link>
               </li>
             ))}
@@ -220,16 +250,20 @@ export default async function CalendarPage({
               const daySessions = sessionsByDay.get(dateKey(d)) ?? [];
               const hasCourt = daySessions.some((s) => s.sessionType !== "negotiation_meeting");
               const hasTaradhi = daySessions.some((s) => s.sessionType === "negotiation_meeting");
+              const st = dayStatus(d);
+              const dayBg = st.kind === "holiday" ? "bg-red-50" : st.kind === "weekend" ? "bg-black/[0.03]" : "";
 
               return (
                 <div
                   key={d.toISOString()}
-                  className={`flex h-16 flex-col items-center justify-start rounded-lg border p-1.5 text-sm ${
+                  title={st.kind === "holiday" ? st.label : undefined}
+                  className={`flex h-16 flex-col items-center justify-start rounded-lg border p-1.5 text-sm ${dayBg} ${
                     isToday ? "border-2 border-navy" : "border-black/5"
-                  } ${inMonth ? "text-navy" : "text-foreground/25"}`}
+                  } ${inMonth ? (st.kind === "holiday" ? "text-red-700" : "text-navy") : "text-foreground/25"}`}
                 >
                   <span>{d.getDate()}</span>
-                  <div className="mt-1 flex gap-1">
+                  {st.kind === "holiday" && inMonth && <span className="text-[9px] leading-tight text-red-600">🕌</span>}
+                  <div className="mt-0.5 flex gap-1">
                     {hasCourt && <span className="h-1.5 w-1.5 rounded-full bg-gold" />}
                     {hasTaradhi && <span className="h-1.5 w-1.5 rounded-full bg-taradhi" />}
                   </div>
@@ -247,6 +281,9 @@ export default async function CalendarPage({
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded border-2 border-navy" /> اليوم الحالي
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded bg-red-100" /> 🕌 عطلة رسمية
             </span>
           </div>
         </section>

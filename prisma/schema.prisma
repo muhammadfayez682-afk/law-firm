@@ -60,6 +60,8 @@ model User {
   serviceDocuments        ServiceDocument[]
   serviceNotes            ServiceNote[]
   completedPrepTasks      SessionPreparationTask[]
+  archivedCases           Case[]                   @relation("CaseArchivedBy")
+  deletedCases            Case[]                   @relation("CaseDeletedBy")
 
   @@map("users")
 }
@@ -185,6 +187,15 @@ model Case {
   conflictCheckConfirmed Boolean                 @default(false)
   clientPartyRole        PartyRole? // صفة موكّلنا في الدعوى (للاستعلام السريع)
   notes                  String?
+  // الأرشفة (متاحة لعدة أدوار) والحذف الفعلي (لمسؤول النظام فقط، محكوم بضوابط)
+  archivedAt    DateTime?
+  archivedById  String?
+  archivedBy    User?     @relation("CaseArchivedBy", fields: [archivedById], references: [id])
+  archiveReason String?   @db.Text
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedBy     User?     @relation("CaseDeletedBy", fields: [deletedById], references: [id])
+  deleteReason  String?   @db.Text
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   parties                CaseParty[]
@@ -929,6 +940,9 @@ enum NotificationType {
   case_closure_rejected
   case_reopened
   case_number_added // أُضيف رقم المحكمة
+  case_archived // أُرشفت القضية
+  case_restored // أُعيدت من الأرشيف
+  case_deleted // حُذفت نهائيًا (تحذير لمسؤولي النظام)
 
   // الجلسات
   session_scheduled

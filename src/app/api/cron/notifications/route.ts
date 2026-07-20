@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { checkTimeSensitiveNotifications } from "@/lib/notifications/scheduler";
+import { purgeSoftDeletedCases } from "@/lib/caseArchive.server";
 
 /**
  * فحص الإشعارات المرتبطة بالوقت (تذكيرات الجلسات، الوكالات، مهل التسوية،
@@ -39,5 +40,13 @@ export async function GET(request: NextRequest) {
     results.pendingAgencyAlerts +
     results.sessionPrepAlerts;
 
-  return NextResponse.json({ ok: true, total, results });
+  // شبكة أمان: حذف نهائي للقضايا المحذوفة ناعمًا منذ أكثر من 30 يومًا.
+  let purgedCases = 0;
+  try {
+    purgedCases = await purgeSoftDeletedCases();
+  } catch {
+    // لا نُفشل الكرون بسبب التنظيف.
+  }
+
+  return NextResponse.json({ ok: true, total, results, purgedCases });
 }

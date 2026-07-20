@@ -14,6 +14,7 @@ import { toEnglishDigits, formatCurrency } from "@/lib/formatNumber";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { SERVICE_STATUS_LABELS_AR, SERVICE_STATUS_STYLES } from "@/lib/services";
 import { TASK_PRIORITY_STYLES, TASK_PRIORITY_LABELS_AR } from "@/lib/tasks";
+import { JudicialCalendarWidget } from "@/components/dashboard/JudicialCalendarWidget";
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
@@ -33,11 +34,21 @@ export default async function DashboardPage() {
         </p>
       </div>
 
+      {/* التقويم العدلي: بارز أعلى للمحامي/الباحث/السكرتارية */}
+      {(role === "lawyer" || role === "researcher" || role === "secretary") && (
+        <JudicialCalendarWidget user={session.user} />
+      )}
+
       {role === "lawyer" && <LawyerView user={session.user} />}
       {role === "researcher" && <ResearcherView user={session.user} />}
       {(role === "system_admin" || role === "supervisor") && <AdminView />}
       {role === "secretary" && <SecretaryView />}
       {role === "accountant" && <AccountantView />}
+
+      {/* التقويم العدلي: مع الإحصائيات لمسؤول النظام، وأسفل للمحاسب */}
+      {(role === "system_admin" || role === "supervisor" || role === "accountant") && (
+        <JudicialCalendarWidget user={session.user} />
+      )}
     </div>
   );
 }

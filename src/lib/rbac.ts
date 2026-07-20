@@ -50,9 +50,11 @@ export function canAccessCase(user: SessionUser, caseData: CaseAccessInput): boo
 
 /** شرط Prisma لتقييد رؤية القضايا يطابق منطق canAccessCase — يُستخدم عند الاستعلام مباشرة من قاعدة البيانات. */
 export function caseVisibilityWhere(user: SessionUser): Prisma.CaseWhereInput {
-  if (isManagement(user.role)) return {};
+  // القضايا المحذوفة (حذف ناعم) تُستبعد من كل الاستعلامات المرئية.
+  if (isManagement(user.role)) return { deletedAt: null };
 
   return {
+    deletedAt: null,
     AND: [
       { NOT: { accessOverrides: { some: { userId: user.id, accessType: "deny" } } } },
       {

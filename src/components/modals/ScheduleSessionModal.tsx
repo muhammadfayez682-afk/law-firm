@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { SessionMode, SessionPlatform, SessionType } from "@prisma/client";
+import { isJudicialHoliday, isWeekend } from "@/lib/judicialCalendar";
 
 const PLATFORM_OPTIONS: { value: SessionPlatform; label: string }[] = [
   { value: "zoom", label: "Zoom" },
@@ -50,6 +51,16 @@ export function ScheduleSessionModal({
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<SessionMode>("in_person");
   const isRemote = mode === "remote" || mode === "hybrid";
+  const [dateWarn, setDateWarn] = useState<{ kind: "holiday" | "weekend"; text: string } | null>(null);
+
+  function onDateChange(value: string) {
+    if (!value) return setDateWarn(null);
+    const d = new Date(value);
+    const h = isJudicialHoliday(d);
+    if (h.isHoliday) setDateWarn({ kind: "holiday", text: `⛔ عطلة رسمية (${h.name}) — المحاكم مغلقة ولن يُقبل الحفظ.` });
+    else if (isWeekend(d)) setDateWarn({ kind: "weekend", text: "⚠️ اليوم المختار عطلة نهاية أسبوع (جمعة/سبت) — تأكد أن الجلسة عن بُعد أو غير محكمة." });
+    else setDateWarn(null);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -95,7 +106,7 @@ export function ScheduleSessionModal({
 
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        const message = data?.error ?? "تعذّر جدولة الجلسة.";
+        const message = data?.message ?? data?.error ?? "تعذّر جدولة الجلسة.";
         setError(message);
         toast.error(message);
         return;
@@ -165,9 +176,15 @@ export function ScheduleSessionModal({
               name="sessionDate"
               type="datetime-local"
               required
+              onChange={(e) => onDateChange(e.target.value)}
               className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold"
               dir="ltr"
             />
+            {dateWarn && (
+              <p className={`mt-1.5 rounded-lg px-3 py-2 text-xs font-medium ${dateWarn.kind === "holiday" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
+                {dateWarn.text}
+              </p>
+            )}
           </div>
 
           <div>

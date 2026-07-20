@@ -56,6 +56,9 @@ export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
   case_closure_rejected: { label: "رفض إغلاق قضية", description: "رُفض طلب إغلاق القضية", icon: "↩️", category: "case", defaultPriority: "high" },
   case_reopened: { label: "إعادة فتح قضية", description: "أُعيد فتح قضية", icon: "🔓", category: "case", defaultPriority: "normal" },
   case_number_added: { label: "إضافة رقم محكمة", description: "أُضيف رقم المحكمة الرسمي للقضية", icon: "🔢", category: "case", defaultPriority: "normal" },
+  case_archived: { label: "أرشفة قضية", description: "أُرشفت قضية", icon: "🗄️", category: "case", defaultPriority: "normal" },
+  case_restored: { label: "استرجاع قضية", description: "أُعيدت قضية من الأرشيف", icon: "♻️", category: "case", defaultPriority: "normal" },
+  case_deleted: { label: "حذف نهائي لقضية", description: "حُذفت قضية نهائيًا", icon: "🗑️", category: "case", defaultPriority: "urgent" },
 
   // الجلسات
   session_scheduled: { label: "جدولة جلسة", description: "جُدولت جلسة جديدة", icon: "📅", category: "session", defaultPriority: "normal" },

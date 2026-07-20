@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canEditCase, caseVisibilityWhere } from "@/lib/rbac";
 import { toHijri, formatDualDate } from "@/lib/dateUtils";
 import { notifyBulk } from "@/lib/notifications/send";
+import { isJudicialHoliday } from "@/lib/judicialCalendar";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -75,6 +76,15 @@ export async function POST(request: NextRequest) {
   }
 
   const sessionDate = new Date(body.sessionDate);
+
+  // منع جدولة جلسة في يوم عطلة رسمية قضائية (المحاكم مغلقة).
+  const holiday = isJudicialHoliday(sessionDate);
+  if (holiday.isHoliday) {
+    return NextResponse.json(
+      { error: "judicial_holiday", message: `لا يمكن جدولة جلسة في عطلة رسمية: ${holiday.name}` },
+      { status: 400 }
+    );
+  }
 
   // نمط الجلسة + رابط الاجتماع عن بُعد (إلزامي وصالح لـ remote/hybrid).
   const sessionMode = ["in_person", "remote", "hybrid"].includes(body.sessionMode) ? body.sessionMode : "in_person";
