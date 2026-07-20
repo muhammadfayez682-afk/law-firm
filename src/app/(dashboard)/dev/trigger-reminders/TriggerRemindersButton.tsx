@@ -10,6 +10,8 @@ type Results = {
   taskAlerts: number;
   invoiceAlerts: number;
   pendingAgencyAlerts: number;
+  prepChecklistsCreated: number;
+  sessionPrepAlerts: number;
 };
 
 const LABELS: Record<keyof Results, string> = {
@@ -19,6 +21,8 @@ const LABELS: Record<keyof Results, string> = {
   taskAlerts: "تنبيهات المهام",
   invoiceAlerts: "تنبيهات الفواتير",
   pendingAgencyAlerts: "تنبيهات قضايا قيد إصدار الوكالة",
+  prepChecklistsCreated: "قوائم تحضير جلسات أُنشئت",
+  sessionPrepAlerts: "تنبيهات تحضير الجلسات",
 };
 
 export function TriggerRemindersButton() {

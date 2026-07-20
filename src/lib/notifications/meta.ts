@@ -63,6 +63,9 @@ export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
   session_reminder_hour: { label: "تذكير جلسة (ساعة)", description: "تذكير بجلسة خلال ساعة", icon: "⏰", category: "session", defaultPriority: "urgent" },
   session_cancelled: { label: "إلغاء جلسة", description: "أُلغيت جلسة", icon: "🚫", category: "session", defaultPriority: "high" },
   session_postponed: { label: "تأجيل جلسة", description: "أُجّلت جلسة", icon: "📆", category: "session", defaultPriority: "normal" },
+  session_prep_reminder: { label: "تحضير الجلسة لم يكتمل", description: "مهام تحضير ناقصة قبل الجلسة بـ3 أيام", icon: "📋", category: "session", defaultPriority: "high" },
+  session_prep_urgent: { label: "تحضير الجلسة عاجل", description: "مهام تحضير ناقصة قبل الجلسة بأقل من 24 ساعة", icon: "⏰", category: "session", defaultPriority: "urgent" },
+  session_prep_critical: { label: "عنصر تحضير حرج غير جاهز", description: "الوكالة أو المذكرات غير جاهزة قبل الجلسة", icon: "🚨", category: "session", defaultPriority: "urgent" },
 
   // الوكالات
   agency_expiring_soon: { label: "وكالة تقترب من الانتهاء", description: "وكالة تنتهي خلال 30 يومًا", icon: "📜", category: "agency", defaultPriority: "normal" },

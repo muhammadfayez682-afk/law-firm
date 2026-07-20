@@ -29,6 +29,7 @@ import { NewTaskModal } from "@/components/modals/NewTaskModal";
 import { EditCourtNumberModal } from "@/components/modals/EditCourtNumberModal";
 import { AddAgencyModal } from "@/components/modals/AddAgencyModal";
 import { CaseNumberDisplay } from "@/components/cases/CaseNumberDisplay";
+import { SessionPrepChecklist, type PrepTask } from "@/components/cases/SessionPrepChecklist";
 import { EditEntityModal, type EditableFieldDescriptor } from "@/components/shared/EditEntityModal";
 import { EntityChangeLog } from "@/components/shared/EntityChangeLog";
 import { canEditField } from "@/lib/editPermissions";
@@ -66,7 +67,7 @@ type FullCase = Omit<Case, "claimValue"> & {
   parties: (CaseParty & { linkedClient: Client | null })[];
   team: (CaseTeamMember & { user: User })[];
   documents: (Document & { uploadedBy: User })[];
-  sessions: CaseSession[];
+  sessions: (CaseSession & { preparationChecklist: PrepTask[] })[];
   amicableSettlement: AmicableSettlement | null;
   closureRequest: (CaseClosureRequest & { requestedBy: User; approvedBy: User | null }) | null;
   reopenLogs: (CaseReopenLog & { reopenedBy: User })[];
@@ -386,6 +387,19 @@ export function CaseDetailView({
           </button>
         </div>
       )}
+
+      {/* تحضير الجلسات القادمة */}
+      {caseData.sessions
+        .filter((s) => s.preparationChecklist.length > 0 && new Date(s.sessionDate) >= now)
+        .map((s) => (
+          <SessionPrepChecklist
+            key={s.id}
+            sessionId={s.id}
+            sessionDate={new Date(s.sessionDate).toISOString()}
+            tasks={s.preparationChecklist}
+            canEdit={canEdit}
+          />
+        ))}
 
       {/* بطاقة أرقام القضية */}
       <section>

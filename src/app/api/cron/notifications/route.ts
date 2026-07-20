@@ -36,7 +36,8 @@ export async function GET(request: NextRequest) {
     results.settlementAlerts +
     results.taskAlerts +
     results.invoiceAlerts +
-    results.pendingAgencyAlerts;
+    results.pendingAgencyAlerts +
+    results.sessionPrepAlerts;
 
   return NextResponse.json({ ok: true, total, results });
 }

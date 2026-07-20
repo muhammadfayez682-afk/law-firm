@@ -59,6 +59,7 @@ model User {
   createdServices         LegalService[]           @relation("ServiceCreator")
   serviceDocuments        ServiceDocument[]
   serviceNotes            ServiceNote[]
+  completedPrepTasks      SessionPreparationTask[]
 
   @@map("users")
 }
@@ -91,6 +92,7 @@ model Client {
   caseParties        CaseParty[]
   invoices           Invoice[]
   services           LegalService[]
+  intakes            IntakeRequest[] @relation("IntakeExistingClient")
 
   // فهرس (غير فريد) لتسريع فحص تكرار الجوال. لا نجعله فريدًا لأن النظام
   // يسمح بتسجيل مكرر بعد تأكيد المستخدم (زر «متابعة الحفظ»). التفرّد على
@@ -197,7 +199,8 @@ model Case {
   closureRequest         CaseClosureRequest?
   reopenLogs             CaseReopenLog[]
   memos                  LegalMemo[]
-  intakeRequest          IntakeRequest?
+  intakeRequest          IntakeRequest?           @relation("ActivatedCase")
+  relatedIntakes         IntakeRequest[]          @relation("RelatedCase")
   tasks                  Task[]
 
   @@map("cases")
@@ -359,10 +362,44 @@ model Session {
   meetingLink     String?
   meetingPlatform SessionPlatform?
   meetingPassword String?
+  // قائمة مهام تحضير الجلسة (تُولَّد تلقائيًا قبل الجلسة بأسبوع)
+  prepChecklistGenerated Boolean                  @default(false)
+  preparationChecklist   SessionPreparationTask[]
   minutes        SessionMinutes?
   filledTemplates FilledTemplate[]
 
   @@map("sessions")
+}
+
+enum PrepTaskType {
+  team_meeting
+  client_contact
+  najiz_review
+  agency_verification
+  memos_review
+  documents_review
+  external_review
+  strategy_alignment
+  other
+}
+
+model SessionPreparationTask {
+  id            String       @id @default(uuid())
+  session       Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId     String
+  taskType      PrepTaskType
+  title         String
+  description   String       @db.Text
+  isRequired    Boolean      @default(true)
+  isCompleted   Boolean      @default(false)
+  completedBy   User?        @relation(fields: [completedById], references: [id])
+  completedById String?
+  completedAt   DateTime?
+  notes         String?      @db.Text
+  createdAt     DateTime     @default(now())
+
+  @@index([sessionId])
+  @@map("session_preparation_tasks")
 }
 
 model SessionMinutes {
@@ -632,6 +669,11 @@ enum ConflictCheckResult {
   confirmed // تعارض مؤكد
 }
 
+enum IntakeKind {
+  case // ينتهي بإنشاء قضية
+  service // ينتهي بإنشاء خدمة قانونية
+}
+
 enum RejectionReason {
   conflict_of_interest // تعارض مصالح
   outside_expertise // خارج التخصص
@@ -651,6 +693,14 @@ model IntakeRequest {
   clientPhone    String
   clientEmail    String?
   clientIdNumber String? // هوية/سجل
+
+  // نوع الطلب: قضية أو خدمة قانونية + ربط اختياري بعميل/قضية موجودة
+  requestKind         IntakeKind   @default(case)
+  existingClient      Client?      @relation("IntakeExistingClient", fields: [existingClientId], references: [id])
+  existingClientId    String?
+  relatedCase         Case?        @relation("RelatedCase", fields: [relatedCaseId], references: [id])
+  relatedCaseId       String?
+  proposedServiceType ServiceType? // نوع الخدمة المقترح (عند requestKind = service)
 
   // بيانات النزاع الأولية
   disputeSummary String    @db.Text // وصف موجز للنزاع
@@ -705,8 +755,8 @@ model IntakeRequest {
   // توقّع إصدار الوكالة (عند التفعيل بدون وكالة) — لتذكير أدق بالمتابعة.
   agencyExpectedDate DateTime?
 
-  // ربط بالقضية عند القبول
-  case   Case?   @relation(fields: [caseId], references: [id])
+  // ربط بالقضية عند القبول (القضية المُنشأة من هذا الطلب)
+  case   Case?   @relation("ActivatedCase", fields: [caseId], references: [id])
   caseId String? @unique // القضية المُنشأة
 
   documents       IntakeDocument[]
@@ -886,6 +936,9 @@ enum NotificationType {
   session_reminder_hour
   session_cancelled
   session_postponed
+  session_prep_reminder // تحضير الجلسة قبل 3 أيام
+  session_prep_urgent // تحضير الجلسة قبل 24 ساعة
+  session_prep_critical // عنصر حرج غير جاهز (وكالة/مذكرة)
 
   // الوكالات
   agency_expiring_soon

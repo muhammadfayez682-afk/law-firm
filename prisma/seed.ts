@@ -939,6 +939,66 @@ async function main() {
     }
   }
 
+  // ===== طلبات استلام: عميل موجود + طلب خدمة (لا قضية) =====
+  const kindIntakeSeed: {
+    requestNumber: string;
+    requestKind: "case" | "service";
+    clientName: string;
+    clientPhone: string;
+    existingClientId: string;
+    disputeSummary: string;
+    proposedServiceType?: "legal_consultation" | "documentation";
+    status: "conflict_check" | "fee_agreement_pending";
+    opposingParty?: string;
+  }[] = [
+    {
+      requestNumber: "INT-2026-0020",
+      requestKind: "case",
+      clientName: companyClientOne.fullName,
+      clientPhone: companyClientOne.phone ?? "0114455667",
+      existingClientId: companyClientOne.id,
+      disputeSummary: "نزاع تجاري جديد لعميل حالي حول تأخر توريد بضاعة متفق عليها بموجب عقد.",
+      opposingParty: "شركة الإمداد السريع",
+      status: "conflict_check",
+    },
+    {
+      requestNumber: "INT-2026-0021",
+      requestKind: "service",
+      clientName: individualClient.fullName,
+      clientPhone: individualClient.phone ?? "0561112233",
+      existingClientId: individualClient.id,
+      disputeSummary: "طلب استشارة قانونية حول صياغة عقد إيجار سكني وتوثيقه لدى الجهات المختصة.",
+      proposedServiceType: "legal_consultation",
+      status: "fee_agreement_pending",
+    },
+  ];
+  for (const it of kindIntakeSeed) {
+    const existing = await prisma.intakeRequest.findUnique({ where: { requestNumber: it.requestNumber } });
+    if (!existing) {
+      await prisma.intakeRequest.create({
+        data: {
+          requestNumber: it.requestNumber,
+          requestKind: it.requestKind,
+          clientName: it.clientName,
+          clientPhone: it.clientPhone,
+          existingClientId: it.existingClientId,
+          disputeSummary: it.disputeSummary,
+          opposingParty: it.opposingParty ?? null,
+          proposedServiceType: it.proposedServiceType ?? null,
+          source: "referral_client",
+          receivedById: anas.id,
+          status: it.status,
+          conflictResult: "clear",
+          conflictNotes: it.requestKind === "service" ? "طلب خدمة — لا خصومة." : "لا يوجد تعارض مصالح",
+          conflictCheckedAt: new Date(),
+          ...(it.status === "fee_agreement_pending"
+            ? { decision: "accepted", decisionById: anas.id, decisionAt: new Date(), assessmentById: anas.id, assessedAt: new Date() }
+            : {}),
+        },
+      });
+    }
+  }
+
   // ===== تفضيلات الإشعارات الافتراضية لكل المستخدمين (كل نوع → داخل النظام) =====
   const allUsersForPrefs = await prisma.user.findMany({ select: { id: true } });
   await prisma.notificationPreference.createMany({

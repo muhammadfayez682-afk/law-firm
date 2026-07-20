@@ -27,7 +27,15 @@ export default async function CaseDetailPage({
       team: { include: { user: true } },
       accessOverrides: true,
       documents: { include: { uploadedBy: true }, orderBy: { createdAt: "desc" } },
-      sessions: { orderBy: { sessionDate: "asc" } },
+      sessions: {
+        orderBy: { sessionDate: "asc" },
+        include: {
+          preparationChecklist: {
+            orderBy: { createdAt: "asc" },
+            include: { completedBy: { select: { fullName: true } } },
+          },
+        },
+      },
       amicableSettlement: true,
       closureRequest: { include: { requestedBy: true, approvedBy: true } },
       reopenLogs: { include: { reopenedBy: true }, orderBy: { reopenedAt: "desc" } },
@@ -55,6 +63,19 @@ export default async function CaseDetailPage({
   const serializedCase = {
     ...caseData,
     claimValue: caseData.claimValue ? Number(caseData.claimValue) : null,
+    sessions: caseData.sessions.map((s) => ({
+      ...s,
+      preparationChecklist: s.preparationChecklist.map((t) => ({
+        id: t.id,
+        taskType: t.taskType,
+        title: t.title,
+        description: t.description,
+        isCompleted: t.isCompleted,
+        completedByName: t.completedBy?.fullName ?? null,
+        completedAt: t.completedAt?.toISOString() ?? null,
+        notes: t.notes,
+      })),
+    })),
   };
 
   const memos = caseData.memos.map((m) => ({

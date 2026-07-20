@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import type { CaseType, IntakeSource, IntakeStatus, Prisma } from "@prisma/client";
+import type { CaseType, IntakeKind, IntakeSource, IntakeStatus, Prisma, ServiceType } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { intakeVisibilityWhere } from "@/lib/intake";
@@ -73,6 +73,13 @@ export async function POST(request: NextRequest) {
   const source = body.source as IntakeSource;
   const force = body.force === true;
 
+  // نوع الطلب (قضية/خدمة) + ربط بعميل موجود أو قضية قائمة.
+  const requestKind: IntakeKind = body.requestKind === "service" ? "service" : "case";
+  const isService = requestKind === "service";
+  const existingClientId = typeof body.existingClientId === "string" && body.existingClientId ? body.existingClientId : null;
+  const relatedCaseId = typeof body.relatedCaseId === "string" && body.relatedCaseId ? body.relatedCaseId : null;
+  const proposedServiceType = isService && body.proposedServiceType ? (body.proposedServiceType as ServiceType) : null;
+
   if (!clientName) return NextResponse.json({ error: "اسم العميل مطلوب" }, { status: 400 });
   if (!clientPhone || !isValidSaudiPhone(clientPhone)) {
     return NextResponse.json({ error: VALIDATION_MESSAGES.phone }, { status: 400 });
@@ -81,15 +88,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "رقم الهوية/السجل يجب أن يكون 10 أرقام (يبدأ بـ 1 للهوية أو 2 للإقامة)" }, { status: 400 });
   }
   if (disputeSummary.length < 30) {
-    return NextResponse.json({ error: "ملخص النزاع يجب ألا يقل عن 30 حرفًا" }, { status: 400 });
+    return NextResponse.json(
+      { error: isService ? "وصف الخدمة المطلوبة يجب ألا يقل عن 30 حرفًا" : "ملخص النزاع يجب ألا يقل عن 30 حرفًا" },
+      { status: 400 }
+    );
   }
-  if (!opposingParty) {
+  // الطرف المقابل مطلوب للقضايا فقط (الخدمات لا خصومة فيها).
+  if (!isService && !opposingParty) {
     return NextResponse.json({ error: "الطرف المقابل مطلوب لفحص التعارض" }, { status: 400 });
   }
-  if (!source) return NextResponse.json({ error: "مصدر القضية مطلوب" }, { status: 400 });
+  if (!source) return NextResponse.json({ error: "مصدر الطلب مطلوب" }, { status: 400 });
 
-  // فحص تكرار الجوال/الهوية (تحذير قابل للتجاوز بـ force بعد تأكيد المستخدم).
-  if (!force) {
+  // العميل الموجود: تحقق من وجوده (لا فحص تكرار عندئذٍ — هو نفسه العميل).
+  if (existingClientId) {
+    const c = await prisma.client.findUnique({ where: { id: existingClientId }, select: { id: true } });
+    if (!c) return NextResponse.json({ error: "العميل المحدد غير موجود" }, { status: 404 });
+  }
+
+  // فحص تكرار الجوال/الهوية — يُتخطّى عند اختيار عميل موجود صراحةً.
+  if (!force && !existingClientId) {
     const phoneDup = await checkPhoneDuplicate(clientPhone);
     if (phoneDup.hasDuplicate) return NextResponse.json(duplicatePayload(phoneDup), { status: 409 });
     if (clientIdNumber) {
@@ -98,8 +115,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // فحص تعارض المصالح الآلي عند الإنشاء.
-  const conflict = await checkConflictOfInterest(opposingParty);
+  // فحص تعارض المصالح الآلي (للقضايا فقط).
+  const conflict = isService
+    ? { result: "clear" as const, details: "طلب خدمة — لا خصومة تستدعي فحص تعارض." }
+    : await checkConflictOfInterest(opposingParty);
 
   const created = await prisma.$transaction(async (tx) => {
     const requestNumber = await generateIntakeNumber(tx);
@@ -111,12 +130,17 @@ export async function POST(request: NextRequest) {
         clientEmail: body.clientEmail?.trim() || null,
         clientIdNumber: clientIdNumber || null,
         disputeSummary,
-        opposingParty,
-        proposedType: (body.proposedType as CaseType) || null,
+        opposingParty: opposingParty || null,
+        proposedType: isService ? null : (body.proposedType as CaseType) || null,
+        requestKind,
+        existingClientId,
+        relatedCaseId,
+        proposedServiceType,
         source,
         referredBy: body.referredBy?.trim() || null,
         receivedById: session.user.id,
-        status: "conflict_check",
+        // طلبات الخدمات لا تمرّ بفحص التعارض — تبدأ مباشرة قيد التقييم.
+        status: isService ? "under_assessment" : "conflict_check",
         conflictResult: conflict.result,
         conflictNotes: conflict.details,
         conflictCheckedAt: new Date(),

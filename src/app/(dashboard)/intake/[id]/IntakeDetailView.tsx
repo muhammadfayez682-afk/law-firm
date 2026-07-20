@@ -843,7 +843,14 @@ function ActivateModal({
         }),
       });
       const d = await res.json().catch(() => null);
-      if (!res.ok) { toast.error(d?.error ?? "تعذّر تفعيل القضية."); return; }
+      if (!res.ok) { toast.error(d?.error ?? "تعذّر التفعيل."); return; }
+      // طلب خدمة → تُنشأ خدمة قانونية بدل قضية.
+      if (d.kind === "service") {
+        toast.success(`أُنشئت الخدمة ${d.serviceNumber}`);
+        router.push(`/services/${d.serviceId}`);
+        router.refresh();
+        return;
+      }
       toast.success(
         d.pendingAgency
           ? `تم تفعيل القضية ${d.internalNumber} — قيد إصدار الوكالة`

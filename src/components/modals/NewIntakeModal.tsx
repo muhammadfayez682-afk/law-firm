@@ -3,8 +3,9 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { CaseType, IntakeSource } from "@prisma/client";
+import type { CaseType, IntakeSource, ServiceType } from "@prisma/client";
 import { INTAKE_SOURCE_LABELS_AR } from "@/lib/intake";
+import { SERVICE_TYPE_LABELS_AR } from "@/lib/services";
 import { saudiPhoneError, VALIDATION_MESSAGES } from "@/lib/validators";
 import { DuplicateWarningModal } from "@/components/modals/DuplicateWarningModal";
 import { DefinedField } from "@/components/ui/DefinedField";
@@ -29,6 +30,15 @@ const sectionTitleClass = "mb-3 font-amiri text-base font-bold text-navy";
 
 type DupState = { type: DuplicateType; value: string; existingIn: DuplicateMatch[] } | null;
 
+type ExistingClient = {
+  id: string;
+  fullName: string;
+  phone: string | null;
+  nationalIdOrCr: string | null;
+  activeCases: { id: string; internalNumber: string; displayNumber: string | null; title: string; status: string }[];
+  services: { id: string; serviceNumber: string; title: string; status: string }[];
+};
+
 export function NewIntakeModal({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -39,6 +49,43 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
   const [clientIdNumber, setClientIdNumber] = useState("");
   const [phoneMatch, setPhoneMatch] = useState<DuplicateMatch | null>(null);
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // الخطوة 1: نوع الطلب — قضية أو خدمة قانونية.
+  const [requestKind, setRequestKind] = useState<"case" | "service">("case");
+  // الخطوة 2: عميل موجود أو جديد.
+  const [clientMode, setClientMode] = useState<"new" | "existing">("new");
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<ExistingClient[]>([]);
+  const [selectedClient, setSelectedClient] = useState<ExistingClient | null>(null);
+  const [relatedCaseId, setRelatedCaseId] = useState("");
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function onSearchChange(v: string) {
+    setSearch(v);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (v.trim().length < 3) {
+      setResults([]);
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/clients/search?q=${encodeURIComponent(v.trim())}`);
+        const data = await res.json();
+        setResults(data.clients ?? []);
+      } catch {
+        setResults([]);
+      }
+    }, 400);
+  }
+
+  function pickClient(c: ExistingClient) {
+    setSelectedClient(c);
+    setClientName(c.fullName);
+    if (c.phone) setClientPhone(c.phone);
+    if (c.nationalIdOrCr) setClientIdNumber(c.nationalIdOrCr);
+    setResults([]);
+    setSearch("");
+  }
 
   const [dup, setDup] = useState<DupState>(null);
   const [pending, setPending] = useState<Record<string, unknown> | null>(null);
@@ -104,19 +151,29 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
     setError(null);
     const formData = new FormData(e.currentTarget);
     const disputeSummary = String(formData.get("disputeSummary") || "").trim();
+    const isService = requestKind === "service";
     if (!clientName.trim()) return setError("اسم العميل مطلوب");
     if (saudiPhoneError(clientPhone)) return setError(VALIDATION_MESSAGES.phone);
     if (clientIdNumber && clientIdNumber.length !== 10) return setError(VALIDATION_MESSAGES.nationalId);
-    if (disputeSummary.length < 30) return setError("ملخص النزاع يجب ألا يقل عن 30 حرفًا");
+    if (disputeSummary.length < 30) {
+      return setError(isService ? "وصف الخدمة يجب ألا يقل عن 30 حرفًا" : "ملخص النزاع يجب ألا يقل عن 30 حرفًا");
+    }
+    if (!isService && !String(formData.get("opposingParty") || "").trim()) {
+      return setError("الطرف المقابل مطلوب لفحص التعارض");
+    }
 
     submit({
+      requestKind,
+      existingClientId: selectedClient?.id ?? null,
+      relatedCaseId: !isService && relatedCaseId ? relatedCaseId : null,
+      proposedServiceType: isService ? formData.get("proposedServiceType") : null,
       clientName: clientName.trim(),
       clientPhone,
       clientEmail: formData.get("clientEmail") || null,
       clientIdNumber: clientIdNumber || null,
       disputeSummary,
-      opposingParty: formData.get("opposingParty"),
-      proposedType: formData.get("proposedType") || null,
+      opposingParty: isService ? null : formData.get("opposingParty"),
+      proposedType: isService ? null : formData.get("proposedType") || null,
       source: formData.get("source"),
       referredBy: formData.get("referredBy") || null,
     });
@@ -131,6 +188,130 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <form onSubmit={handleSubmit} noValidate className="space-y-6">
+          {/* الخطوة 1: نوع الطلب */}
+          <section>
+            <h3 className={sectionTitleClass}>1. نوع الطلب</h3>
+            <div className="flex gap-2">
+              {([
+                { v: "case", l: "⚖️ قضية" },
+                { v: "service", l: "📄 خدمة قانونية" },
+              ] as const).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => setRequestKind(o.v)}
+                  className={`rounded-lg px-5 py-2 text-sm font-medium transition-colors ${requestKind === o.v ? "bg-navy text-white" : "border border-black/10 text-navy hover:bg-black/5"}`}
+                >
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          {/* الخطوة 2: العميل */}
+          <section>
+            <h3 className={sectionTitleClass}>2. العميل</h3>
+            <div className="mb-3 flex gap-2">
+              {([
+                { v: "new", l: "➕ عميل جديد" },
+                { v: "existing", l: "🔍 عميل موجود" },
+              ] as const).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => {
+                    setClientMode(o.v);
+                    if (o.v === "new") { setSelectedClient(null); setRelatedCaseId(""); }
+                  }}
+                  className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${clientMode === o.v ? "bg-gold text-navy" : "border border-black/10 text-navy hover:bg-black/5"}`}
+                >
+                  {o.l}
+                </button>
+              ))}
+            </div>
+
+            {clientMode === "existing" && !selectedClient && (
+              <div>
+                <input
+                  value={search}
+                  onChange={(e) => onSearchChange(e.target.value)}
+                  placeholder="ابحث بالجوال أو الهوية أو الاسم (3 أحرف على الأقل)..."
+                  className={inputClass}
+                />
+                {results.length > 0 && (
+                  <ul className="mt-2 max-h-56 space-y-1 overflow-y-auto rounded-lg border border-black/10 p-1">
+                    {results.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => pickClient(c)}
+                          className="w-full rounded-lg px-3 py-2 text-right text-sm hover:bg-navy/5"
+                        >
+                          <span className="block font-medium text-navy">{c.fullName}</span>
+                          <span className="block text-xs text-foreground/50" dir="ltr">
+                            {c.phone ?? "—"} · {c.nationalIdOrCr ?? "—"}
+                          </span>
+                          <span className="block text-xs text-foreground/50">
+                            قضايا نشطة: {c.activeCases.length} · خدمات: {c.services.length}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {selectedClient && (
+              <div className="rounded-lg border-2 border-gold/40 bg-gold/5 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-navy">{selectedClient.fullName}</p>
+                    <p className="text-xs text-foreground/60" dir="ltr">
+                      {selectedClient.phone ?? "—"} · {selectedClient.nationalIdOrCr ?? "—"}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => { setSelectedClient(null); setRelatedCaseId(""); }} className="text-xs text-red-600 underline">
+                    تغيير
+                  </button>
+                </div>
+
+                {selectedClient.activeCases.length > 0 && (
+                  <div className="mt-3">
+                    <p className="mb-1 text-xs font-medium text-navy">القضايا النشطة:</p>
+                    <ul className="space-y-0.5 text-xs text-foreground/70">
+                      {selectedClient.activeCases.map((c) => (
+                        <li key={c.id}>• {c.displayNumber ?? c.internalNumber} — {c.title}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {selectedClient.services.length > 0 && (
+                  <div className="mt-2">
+                    <p className="mb-1 text-xs font-medium text-navy">الخدمات السابقة:</p>
+                    <ul className="space-y-0.5 text-xs text-foreground/70">
+                      {selectedClient.services.map((s) => (
+                        <li key={s.id}>• {s.serviceNumber} — {s.title}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {requestKind === "case" && selectedClient.activeCases.length > 0 && (
+                  <div className="mt-3">
+                    <label className={labelClass}>مرتبط بقضية موجودة؟ (اختياري)</label>
+                    <select value={relatedCaseId} onChange={(e) => setRelatedCaseId(e.target.value)} className={inputClass}>
+                      <option value="">طلب مستقل</option>
+                      {selectedClient.activeCases.map((c) => (
+                        <option key={c.id} value={c.id}>{c.displayNumber ?? c.internalNumber} — {c.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
           <section>
             <h3 className={sectionTitleClass}>بيانات العميل</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -183,26 +364,41 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
           </section>
 
           <section>
-            <h3 className={sectionTitleClass}>بيانات النزاع</h3>
+            <h3 className={sectionTitleClass}>{requestKind === "service" ? "تفاصيل الخدمة المطلوبة" : "بيانات النزاع"}</h3>
             <div className="space-y-4">
               <div>
                 <DefinedField definitionKey="dispute_summary" required htmlFor="disputeSummary" />
                 <textarea id="disputeSummary" name="disputeSummary" rows={4} className={inputClass} />
                 <p className="mt-1 text-xs text-foreground/50">30 حرفًا على الأقل</p>
               </div>
-              <div>
-                <DefinedField definitionKey="opposing_party" required htmlFor="opposingParty" />
-                <input id="opposingParty" name="opposingParty" required className={inputClass} />
-              </div>
+              {requestKind === "case" && (
+                <div>
+                  <DefinedField definitionKey="opposing_party" required htmlFor="opposingParty" />
+                  <input id="opposingParty" name="opposingParty" className={inputClass} />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={labelClass}>نوع القضية المقترح</label>
-                  <select name="proposedType" defaultValue="" className={inputClass}>
-                    <option value="">غير محدد</option>
-                    {CASE_TYPE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+                  {requestKind === "service" ? (
+                    <>
+                      <label className={labelClass}>نوع الخدمة المقترح</label>
+                      <select name="proposedServiceType" defaultValue="legal_consultation" className={inputClass}>
+                        {Object.entries(SERVICE_TYPE_LABELS_AR).map(([v, l]) => (
+                          <option key={v} value={v as ServiceType}>{l}</option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <>
+                      <label className={labelClass}>نوع القضية المقترح</label>
+                      <select name="proposedType" defaultValue="" className={inputClass}>
+                        <option value="">غير محدد</option>
+                        {CASE_TYPE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
                 </div>
                 <div>
                   <label className={labelClass}>مصدر القضية <span className="text-red-600">*</span></label>

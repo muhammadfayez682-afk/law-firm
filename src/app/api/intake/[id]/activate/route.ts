@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import type { AgencyType, CaseStatus, CaseType, ClientType, PartyRole } from "@prisma/client";
+import type { AgencyType, CaseStatus, CaseType, ClientType, PartyRole, ServiceType } from "@prisma/client";
+import { generateServiceNumber } from "@/lib/services";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canActivateIntake } from "@/lib/intake";
@@ -39,6 +40,77 @@ export async function POST(request: NextRequest, { params }: Params) {
   const body = await request.json();
   const responsibleLawyerId: string = body.responsibleLawyerId || session.user.id;
   const clientType = (body.clientType as ClientType) || "individual";
+
+  // ===== طلب خدمة: يُنشأ LegalService بدل Case =====
+  if (intake.requestKind === "service") {
+    const serviceTitle =
+      (typeof body.title === "string" && body.title.trim()) || intake.disputeSummary.slice(0, 60);
+    const serviceType = (body.serviceType as ServiceType) || intake.proposedServiceType || "other";
+
+    try {
+      const service = await prisma.$transaction(async (tx) => {
+        // العميل: الموجود المرتبط، أو ربط بالهوية، أو إنشاء جديد.
+        let clientId: string | null = intake.existingClientId;
+        if (!clientId && intake.clientIdNumber) {
+          const existing = await tx.client.findUnique({ where: { nationalIdOrCr: intake.clientIdNumber } });
+          if (existing) clientId = existing.id;
+        }
+        if (!clientId) {
+          const client = await tx.client.create({
+            data: {
+              type: clientType,
+              fullName: intake.clientName,
+              nationalIdOrCr: intake.clientIdNumber || null,
+              phone: intake.clientPhone,
+              email: intake.clientEmail || null,
+              status: "active",
+            },
+          });
+          clientId = client.id;
+        }
+
+        const serviceNumber = await generateServiceNumber(tx);
+        const created = await tx.legalService.create({
+          data: {
+            serviceNumber,
+            title: serviceTitle,
+            serviceType,
+            description: intake.disputeSummary,
+            clientId,
+            assignedToId: responsibleLawyerId,
+            createdById: session.user.id,
+            fee: body.fee !== undefined && body.fee !== null && body.fee !== "" ? Number(body.fee) : null,
+          },
+        });
+
+        // نقل مستندات الاستلام إلى مستندات الخدمة.
+        for (const doc of intake.documents) {
+          await tx.serviceDocument.create({
+            data: { serviceId: created.id, uploadedById: doc.uploadedById, title: doc.title, storagePath: doc.storagePath },
+          });
+        }
+
+        await tx.intakeRequest.update({
+          where: { id },
+          data: { status: "accepted", feeAgreementSignedAt: intake.feeAgreementSignedAt ?? new Date() },
+        });
+
+        return created;
+      });
+
+      await prisma.auditLog.create({
+        data: { userId: session.user.id, action: "create", resourceType: "LegalService", resourceId: service.id },
+      });
+
+      return NextResponse.json(
+        { kind: "service", serviceId: service.id, serviceNumber: service.serviceNumber },
+        { status: 201 }
+      );
+    } catch {
+      return NextResponse.json({ error: "تعذّر تفعيل الخدمة" }, { status: 500 });
+    }
+  }
+
   const clientPartyRole = (body.clientPartyRole as PartyRole) || "plaintiff";
   const caseType = (body.caseType as CaseType) || intake.proposedType || "other";
   const title =
@@ -55,9 +127,9 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   try {
     const created = await prisma.$transaction(async (tx) => {
-      // 1. العميل: ربط بموجود عبر الهوية/السجل أو إنشاء جديد.
-      let clientId: string | null = null;
-      if (intake.clientIdNumber) {
+      // 1. العميل: العميل الموجود المرتبط بالطلب، أو ربط بالهوية/السجل، أو إنشاء جديد.
+      let clientId: string | null = intake.existingClientId;
+      if (!clientId && intake.clientIdNumber) {
         const existing = await tx.client.findUnique({
           where: { nationalIdOrCr: intake.clientIdNumber },
         });

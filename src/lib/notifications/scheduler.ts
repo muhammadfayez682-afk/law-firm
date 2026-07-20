@@ -2,6 +2,7 @@ import type { NotificationType, NotificationPriority } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendNotification } from "./send";
 import { getUserIdsByRoles } from "./recipients";
+import { DEFAULT_PREP_TASKS, isCriticalPrepTask } from "@/lib/sessionPrep";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -13,6 +14,8 @@ export type SchedulerResults = {
   taskAlerts: number;
   invoiceAlerts: number;
   pendingAgencyAlerts: number;
+  prepChecklistsCreated: number;
+  sessionPrepAlerts: number;
 };
 
 /**
@@ -65,6 +68,8 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
     taskAlerts: 0,
     invoiceAlerts: 0,
     pendingAgencyAlerts: 0,
+    prepChecklistsCreated: 0,
+    sessionPrepAlerts: 0,
   };
   const now = Date.now();
 
@@ -221,7 +226,116 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
   // ===== 6. القضايا قيد إصدار الوكالة (تنبيهات متدرجة 3/7/14 يومًا) =====
   results.pendingAgencyAlerts = await checkPendingAgencyCases();
 
+  // ===== 7. مهام تحضير الجلسات: توليد + تنبيهات متدرّجة =====
+  results.prepChecklistsCreated = await generateSessionPrepChecklists();
+  results.sessionPrepAlerts = await checkSessionPrepReadiness();
+
   return results;
+}
+
+/**
+ * يولّد قائمة مهام التحضير (6 مهام) لكل جلسة مجدولة خلال أسبوع ولم تُولَّد لها بعد.
+ * يعيد عدد القوائم المُنشأة.
+ */
+export async function generateSessionPrepChecklists(): Promise<number> {
+  const now = Date.now();
+  const sessions = await prisma.session.findMany({
+    where: {
+      status: "scheduled",
+      prepChecklistGenerated: false,
+      sessionDate: { gte: new Date(now), lte: new Date(now + 7 * DAY) },
+    },
+    select: { id: true },
+  });
+
+  let created = 0;
+  for (const s of sessions) {
+    await prisma.$transaction(async (tx) => {
+      await tx.sessionPreparationTask.createMany({
+        data: DEFAULT_PREP_TASKS.map((t) => ({
+          sessionId: s.id,
+          taskType: t.taskType,
+          title: t.title,
+          description: t.description,
+          isRequired: t.isRequired,
+        })),
+      });
+      await tx.session.update({ where: { id: s.id }, data: { prepChecklistGenerated: true } });
+    });
+    created++;
+  }
+  return created;
+}
+
+/**
+ * تنبيهات جاهزية التحضير:
+ *  - ≤ 3 أيام ومهام ناقصة → تذكير للمحامي المسؤول.
+ *  - ≤ 24 ساعة ومهام ناقصة → عاجل للفريق + مسؤولي النظام.
+ *  - عنصر حرج ناقص (وكالة/مذكرات) خلال 24 ساعة → تنبيه حرج.
+ */
+export async function checkSessionPrepReadiness(): Promise<number> {
+  const now = Date.now();
+  const sessions = await prisma.session.findMany({
+    where: {
+      status: "scheduled",
+      prepChecklistGenerated: true,
+      sessionDate: { gte: new Date(now), lte: new Date(now + 3 * DAY) },
+    },
+    include: {
+      preparationChecklist: true,
+      case: { include: { team: true } },
+    },
+  });
+  const adminIds = await getUserIdsByRoles(["system_admin"]);
+
+  let count = 0;
+  for (const s of sessions) {
+    const pending = s.preparationChecklist.filter((t) => !t.isCompleted);
+    if (pending.length === 0) continue;
+
+    const untilMs = new Date(s.sessionDate).getTime() - now;
+    const caseNo = s.case.displayNumber ?? s.case.internalNumber;
+    const criticalPending = pending.filter((t) => isCriticalPrepTask(t.taskType));
+
+    if (untilMs <= DAY) {
+      // عاجل: الفريق + مسؤولو النظام.
+      const recipients = new Set<string>([s.case.responsibleLawyerId, ...s.case.team.map((m) => m.userId), ...adminIds]);
+      for (const rid of recipients) {
+        const sent = await notifyOnce(rid, "session_prep_urgent", s.id, 20 * HOUR, {
+          priority: "urgent",
+          title: "تحضير الجلسة غير مكتمل — أقل من 24 ساعة",
+          message: `الجلسة في القضية ${caseNo} خلال أقل من يوم، وبقي ${pending.length} من مهام التحضير.`,
+          actionUrl: `/cases/${s.caseId}`,
+          resourceType: "session",
+        });
+        if (sent) count++;
+      }
+      // تنبيه حرج منفصل عند نقص الوكالة/المذكرات.
+      if (criticalPending.length > 0) {
+        for (const rid of recipients) {
+          const sent = await notifyOnce(rid, "session_prep_critical", s.id, 20 * HOUR, {
+            priority: "urgent",
+            title: "⚠️ عنصر حرج غير جاهز قبل الجلسة",
+            message: `غير مُنجز: ${criticalPending.map((t) => t.title).join("، ")} — القضية ${caseNo}.`,
+            actionUrl: `/cases/${s.caseId}`,
+            resourceType: "session",
+          });
+          if (sent) count++;
+        }
+      }
+    } else {
+      // ≤ 3 أيام: تذكير للمحامي المسؤول.
+      const sent = await notifyOnce(s.case.responsibleLawyerId, "session_prep_reminder", s.id, 2 * DAY, {
+        priority: "high",
+        title: "تحضير الجلسة لم يكتمل",
+        message: `بقي ${pending.length} من مهام تحضير الجلسة في القضية ${caseNo} (الجلسة خلال 3 أيام).`,
+        actionUrl: `/cases/${s.caseId}`,
+        resourceType: "session",
+      });
+      if (sent) count++;
+    }
+  }
+  return count;
 }
 
 /**
