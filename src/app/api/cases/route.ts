@@ -248,7 +248,7 @@ export async function POST(request: NextRequest) {
           notes: body.notes || null,
           parties: { create: partiesCreate },
           team: {
-            create: [{ userId: body.responsibleLawyerId, roleInCase: "lawyer" }],
+            create: [{ userId: body.responsibleLawyerId, roleInCase: "lead_lawyer" }],
           },
           ...(platform
             ? {

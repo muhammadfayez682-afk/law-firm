@@ -50,11 +50,20 @@ export default async function IntakeDetailPage({
 
   const canDelegate = canDelegateAssessment(session.user.role);
 
-  const [lawyers, delegateUsers, taskUsers] = await Promise.all([
+  const [lawyers, teamUsers, delegateUsers, taskUsers] = await Promise.all([
     prisma.user.findMany({
       where: { role: { in: CASE_HANDLER_ROLES }, isActive: true },
       orderBy: { fullName: "asc" },
       select: { id: true, fullName: true },
+    }),
+    // مرشّحو تشكيل الفريق (مشرف/محامٍ رئيسي/مساعد/باحث) مع أدوارهم للتصفية في الواجهة.
+    prisma.user.findMany({
+      where: {
+        role: { in: ["system_admin", "supervisor", "lawyer", "researcher"] },
+        isActive: true,
+      },
+      orderBy: { fullName: "asc" },
+      select: { id: true, fullName: true, role: true },
     }),
     // المُفوَّض إليهم: كل الموظفين النشطين عدا السكرتارية والمحاسب.
     canDelegate
@@ -143,6 +152,7 @@ export default async function IntakeDetailPage({
     <IntakeDetailView
       intake={serialized}
       lawyers={lawyers}
+      teamUsers={teamUsers}
       canAssess={canAssessIntake(session.user, intake)}
       canDecide={canDecideIntake(session.user.role)}
       canActivate={canActivateIntake(session.user.role)}

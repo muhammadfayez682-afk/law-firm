@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notifyBulk } from "@/lib/notifications/send";
+import { MEMO_REVIEWER_TEAM_ROLES } from "@/lib/caseTeam";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -52,7 +53,9 @@ export async function POST(_request: NextRequest, { params }: Params) {
   // إشعار مراجعي القضية (المحامي المسؤول + مشرفو/محامو الفريق) بمذكرة بانتظار المراجعة.
   const reviewerIds = [
     memo.case.responsibleLawyerId,
-    ...memo.case.team.filter((m) => m.roleInCase === "lawyer" || m.roleInCase === "supervisor").map((m) => m.userId),
+    ...memo.case.team
+      .filter((m) => MEMO_REVIEWER_TEAM_ROLES.includes(m.roleInCase))
+      .map((m) => m.userId),
   ].filter((uid) => uid !== session.user.id);
   await notifyBulk(reviewerIds, {
     type: "memo_pending_review",

@@ -7,6 +7,14 @@ import { prisma } from "@/lib/prisma";
 import { canActivateIntake } from "@/lib/intake";
 import { computeDeadlineDate, getAmicableSettlementPlatform } from "@/lib/caseFlow";
 import { OPPOSING_ROLE, PARTY_ROLE_LABELS_AR } from "@/lib/parties";
+import {
+  buildTeamMembers,
+  TeamValidationError,
+  TEAM_ROLE_LABELS_AR,
+  type TeamInput,
+  type TeamMemberSpec,
+} from "@/lib/caseTeam";
+import { notify } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -117,6 +125,26 @@ export async function POST(request: NextRequest, { params }: Params) {
     (typeof body.title === "string" && body.title.trim()) ||
     intake.disputeSummary.slice(0, 60);
 
+  // ===== تشكيل فريق القضية =====
+  // مدخلات الفريق الكاملة، مع سقوط احتياطي للتوافق (responsibleLawyerId → المحامي الرئيسي).
+  const teamInput: TeamInput = body.team
+    ? {
+        supervisorId: body.team.supervisorId ?? null,
+        leadLawyerId: body.team.leadLawyerId ?? responsibleLawyerId,
+        coLawyerIds: Array.isArray(body.team.coLawyerIds) ? body.team.coLawyerIds : [],
+        researcherIds: Array.isArray(body.team.researcherIds) ? body.team.researcherIds : [],
+      }
+    : { leadLawyerId: responsibleLawyerId };
+
+  let teamMembers: TeamMemberSpec[];
+  try {
+    teamMembers = buildTeamMembers(teamInput);
+  } catch (e) {
+    const msg = e instanceof TeamValidationError ? e.message : "تشكيل الفريق غير صالح";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+  const leadLawyerId = teamInput.leadLawyerId;
+
   // الوكالة اختيارية عند التفعيل: إن وُجد رقم + تاريخ إصدار تُنشأ ويُبدأ العمل كاملًا،
   // وإلا تدخل القضية حالة "قيد إصدار الوكالة" (pending_agency) مع متابعة لاحقة.
   const agencyNumber = typeof body.agencyNumber === "string" ? body.agencyNumber.trim() : "";
@@ -175,11 +203,12 @@ export async function POST(request: NextRequest, { params }: Params) {
           title,
           caseType,
           clientId,
-          responsibleLawyerId,
+          // المحامي الرئيسي يُزامَن مع responsibleLawyerId للتوافق مع بقية النظام.
+          responsibleLawyerId: leadLawyerId,
           conflictCheckConfirmed: true,
           clientPartyRole,
           notes: `مُنشأة من طلب الاستلام ${intake.requestNumber}.`,
-          team: { create: [{ userId: responsibleLawyerId, roleInCase: "lawyer" }] },
+          team: { create: teamMembers.map((m) => ({ userId: m.userId, roleInCase: m.roleInCase })) },
           parties: {
             create: [
               {
@@ -278,6 +307,21 @@ export async function POST(request: NextRequest, { params }: Params) {
         resourceId: created.id,
       },
     });
+
+    // إشعار كل عضو في الفريق بدوره (عدا من فعّل القضية بنفسه).
+    for (const m of teamMembers) {
+      if (m.userId === session.user.id) continue;
+      await notify({
+        recipientId: m.userId,
+        type: "case_assigned",
+        title: "أُسندت إليك قضية جديدة",
+        message: `${created.title} — دورك: ${TEAM_ROLE_LABELS_AR[m.roleInCase]}`,
+        resourceType: "Case",
+        resourceId: created.id,
+        actionUrl: `/cases/${created.id}`,
+        triggeredById: session.user.id,
+      });
+    }
 
     return NextResponse.json(
       {

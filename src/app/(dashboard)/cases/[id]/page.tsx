@@ -74,10 +74,19 @@ export default async function CaseDetailPage({
     }),
   };
 
-  const [flowStages, firstStage, taskUsers] = await Promise.all([
+  const [flowStages, firstStage, taskUsers, teamUsers] = await Promise.all([
     getCaseFlowStages(caseData.caseType),
     getFirstStage(caseData.caseType),
     getAssignableUsers(prisma, { id: session.user.id, role: session.user.role }),
+    // مرشّحو تشكيل الفريق (لمودال تعديل الفريق).
+    prisma.user.findMany({
+      where: {
+        role: { in: ["system_admin", "supervisor", "lawyer", "researcher"] },
+        isActive: true,
+      },
+      orderBy: { fullName: "asc" },
+      select: { id: true, fullName: true, role: true },
+    }),
   ]);
   const settlementPlatform = getAmicableSettlementPlatform(caseData.caseType);
 
@@ -135,6 +144,7 @@ export default async function CaseDetailPage({
       pendingMemoReview={pendingMemoReview}
       tasks={tasks}
       taskUsers={taskUsers}
+      teamUsers={teamUsers}
       archiveInfo={archiveInfo}
     />
   );

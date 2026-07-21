@@ -29,6 +29,7 @@ import { CLIENT_PARTY_ROLE_OPTIONS, PARTY_ROLE_LABELS_AR } from "@/lib/parties";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { formatCurrency, toEnglishDigits } from "@/lib/formatNumber";
 import { NewTaskModal } from "@/components/modals/NewTaskModal";
+import { TeamFormationFields, EMPTY_TEAM, type TeamState } from "@/components/cases/TeamFormationFields";
 
 type IntakeData = {
   id: string;
@@ -100,6 +101,7 @@ const labelClass = "mb-1.5 block text-sm font-medium text-navy";
 export function IntakeDetailView({
   intake,
   lawyers,
+  teamUsers,
   canAssess,
   canDecide,
   canActivate,
@@ -111,6 +113,7 @@ export function IntakeDetailView({
 }: {
   intake: IntakeData;
   lawyers: { id: string; fullName: string }[];
+  teamUsers: { id: string; fullName: string; role: UserRole }[];
   canAssess: boolean;
   canDecide: boolean;
   canActivate: boolean;
@@ -455,7 +458,7 @@ export function IntakeDetailView({
       {showActivate && (
         <ActivateModal
           intake={intake}
-          lawyers={lawyers}
+          teamUsers={teamUsers}
           onClose={() => setShowActivate(false)}
         />
       )}
@@ -802,20 +805,25 @@ function RejectModal({ intakeId, onClose }: { intakeId: string; onClose: () => v
 
 function ActivateModal({
   intake,
-  lawyers,
+  teamUsers,
   onClose,
 }: {
   intake: IntakeData;
-  lawyers: { id: string; fullName: string }[];
+  teamUsers: { id: string; fullName: string; role: string }[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   // هل الوكالة جاهزة؟ now = املأها الآن · expected = يتوقع إصدارها لاحقًا · none = بعد بدء العمل
   const [agencyMode, setAgencyMode] = useState<"now" | "expected" | "none">("none");
+  const [team, setTeam] = useState<TeamState>(EMPTY_TEAM);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!team.leadLawyerId) {
+      toast.error("المحامي الرئيسي إلزامي");
+      return;
+    }
     const fd = new FormData(e.currentTarget);
     setLoading(true);
     try {
@@ -823,7 +831,12 @@ function ActivateModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          responsibleLawyerId: fd.get("responsibleLawyerId"),
+          team: {
+            supervisorId: team.supervisorId || null,
+            leadLawyerId: team.leadLawyerId,
+            coLawyerIds: team.coLawyerIds,
+            researcherIds: team.researcherIds,
+          },
           clientPartyRole: fd.get("clientPartyRole"),
           caseType: fd.get("caseType"),
           title: fd.get("title") || null,
@@ -870,13 +883,6 @@ function ActivateModal({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className={labelClass}>المحامي المسؤول <span className="text-red-600">*</span></label>
-            <select name="responsibleLawyerId" required defaultValue="" className={inputClass}>
-              <option value="" disabled>اختر المحامي</option>
-              {lawyers.map((l) => <option key={l.id} value={l.id}>{l.fullName}</option>)}
-            </select>
-          </div>
-          <div>
             <label className={labelClass}>نوع القضية</label>
             <select name="caseType" defaultValue={intake.proposedType ?? "other"} className={inputClass}>
               {Object.entries(CASE_TYPE_LABELS_AR).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -895,6 +901,12 @@ function ActivateModal({
               <option value="company">شركة</option>
             </select>
           </div>
+        </div>
+
+        {/* قسم 2: تشكيل فريق القضية */}
+        <div className="border-t border-black/5 pt-4">
+          <h3 className="mb-3 font-semibold text-navy">👥 تشكيل فريق القضية</h3>
+          <TeamFormationFields users={teamUsers} value={team} onChange={setTeam} />
         </div>
 
         {/* الوكالة: اختيارية عند التفعيل */}

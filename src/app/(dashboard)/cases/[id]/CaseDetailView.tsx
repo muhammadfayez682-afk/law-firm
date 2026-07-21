@@ -18,6 +18,7 @@ import type {
   User,
 } from "@prisma/client";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
+import { CaseTeamPanel } from "@/components/cases/CaseTeamPanel";
 import { SettlementPanel } from "@/components/cases/SettlementPanel";
 import { CasePipeline } from "@/components/cases/CasePipeline";
 import { ClosureRequestBanner } from "@/components/cases/ClosureRequestBanner";
@@ -87,12 +88,6 @@ const CASE_TYPE_LABELS_AR: Record<Case["caseType"], string> = {
   other: "أخرى",
 };
 
-const TEAM_ROLE_LABELS_AR: Record<CaseTeamMember["roleInCase"], string> = {
-  supervisor: "مشرف",
-  lawyer: "محامٍ مترافع",
-  researcher: "باحث قانوني",
-};
-
 const DOCUMENT_VISIBILITY_LABELS_AR: Record<DocumentVisibility, string> = {
   case_team: "فريق القضية",
   partners_only: "مسؤول النظام فقط",
@@ -156,6 +151,7 @@ export function CaseDetailView({
   pendingMemoReview,
   tasks,
   taskUsers,
+  teamUsers,
   archiveInfo,
 }: {
   caseData: FullCase;
@@ -171,6 +167,7 @@ export function CaseDetailView({
   pendingMemoReview: number;
   tasks: CaseTask[];
   taskUsers: { id: string; fullName: string; role: UserRole }[];
+  teamUsers: { id: string; fullName: string; role: string }[];
   archiveInfo: ArchiveInfo;
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -761,22 +758,18 @@ export function CaseDetailView({
         </div>
 
         <div className="space-y-6">
-          <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
-            <h2 className="mb-3 font-semibold text-navy">الفريق المسند</h2>
-            <ul className="space-y-2 text-sm">
-              {caseData.team.map((member) => (
-                <li key={member.id} className="flex items-center justify-between">
-                  <span>{member.user.fullName}</span>
-                  <span className="text-xs text-foreground/50">
-                    {TEAM_ROLE_LABELS_AR[member.roleInCase]}
-                  </span>
-                </li>
-              ))}
-              {caseData.team.length === 0 && (
-                <p className="text-sm text-foreground/50">لا يوجد أعضاء مسندون</p>
-              )}
-            </ul>
-          </section>
+          <CaseTeamPanel
+            caseId={caseData.id}
+            caseTitle={caseData.title}
+            team={caseData.team.map((member) => ({
+              id: member.id,
+              userId: member.userId,
+              fullName: member.user.fullName,
+              roleInCase: member.roleInCase,
+            }))}
+            teamUsers={teamUsers}
+            canEdit={userRole === "system_admin" || userRole === "supervisor"}
+          />
 
           <CasePipeline stages={flowStages} status={caseData.status} />
         </div>

@@ -248,9 +248,11 @@ model CaseParty {
 }
 
 enum CaseTeamRole {
-  supervisor // المشرف — المسؤول الأول عن القضية
-  lawyer // المحامي المترافع
-  researcher // الباحث القانوني
+  lead_supervisor // المشرف الرئيسي (اختياري، واحد)
+  co_supervisor // مشرف مساعد
+  lead_lawyer // المحامي الرئيسي (إلزامي، واحد) — يُزامَن مع Case.responsibleLawyerId
+  co_lawyer // محامٍ مساعد (عدد مفتوح)
+  researcher // باحث قانوني (عدد مفتوح)
 }
 
 model CaseTeamMember {
@@ -943,6 +945,7 @@ enum NotificationType {
   case_archived // أُرشفت القضية
   case_restored // أُعيدت من الأرشيف
   case_deleted // حُذفت نهائيًا (تحذير لمسؤولي النظام)
+  case_team_updated // تغيّر تشكيل فريق القضية (إضافة/إزالة عضو)
 
   // الجلسات
   session_scheduled

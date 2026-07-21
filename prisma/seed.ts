@@ -112,8 +112,8 @@ async function main() {
       },
       team: {
         create: [
-          { userId: anas.id, roleInCase: "supervisor" },
-          { userId: lamia.id, roleInCase: "lawyer" },
+          { userId: anas.id, roleInCase: "lead_supervisor" },
+          { userId: lamia.id, roleInCase: "lead_lawyer" },
           { userId: sultan.id, roleInCase: "researcher" },
         ],
       },
@@ -143,8 +143,8 @@ async function main() {
       },
       team: {
         create: [
-          { userId: abdulrahman.id, roleInCase: "supervisor" },
-          { userId: sahar.id, roleInCase: "lawyer" },
+          { userId: abdulrahman.id, roleInCase: "lead_supervisor" },
+          { userId: sahar.id, roleInCase: "lead_lawyer" },
           { userId: yazid.id, roleInCase: "researcher" },
         ],
       },
@@ -190,8 +190,8 @@ async function main() {
       },
       team: {
         create: [
-          { userId: anas.id, roleInCase: "supervisor" },
-          { userId: omar.id, roleInCase: "lawyer" },
+          { userId: anas.id, roleInCase: "lead_supervisor" },
+          { userId: omar.id, roleInCase: "lead_lawyer" },
           { userId: sultan.id, roleInCase: "researcher" },
         ],
       },
@@ -234,8 +234,8 @@ async function main() {
       },
       team: {
         create: [
-          { userId: abdulrahman.id, roleInCase: "supervisor" },
-          { userId: lamia.id, roleInCase: "lawyer" },
+          { userId: abdulrahman.id, roleInCase: "lead_supervisor" },
+          { userId: lamia.id, roleInCase: "lead_lawyer" },
           { userId: yazid.id, roleInCase: "researcher" },
         ],
       },
@@ -267,8 +267,8 @@ async function main() {
       clientPartyRole: "plaintiff",
       team: {
         create: [
-          { userId: anas.id, roleInCase: "supervisor" },
-          { userId: omar.id, roleInCase: "lawyer" },
+          { userId: anas.id, roleInCase: "lead_supervisor" },
+          { userId: omar.id, roleInCase: "lead_lawyer" },
         ],
       },
     },
@@ -308,7 +308,7 @@ async function main() {
           { role: "plaintiff", name: "شركة الأفق للمقاولات", isOurClient: true, linkedClientId: companyClientOne.id },
         ],
       },
-      team: { create: [{ userId: sahar.id, roleInCase: "lawyer" }] },
+      team: { create: [{ userId: sahar.id, roleInCase: "lead_lawyer" }] },
     },
   });
 
@@ -331,7 +331,7 @@ async function main() {
           { role: "plaintiff", name: "عبدالله بن سعيد الحربي", isOurClient: true, linkedClientId: individualClient.id },
         ],
       },
-      team: { create: [{ userId: lamia.id, roleInCase: "lawyer" }] },
+      team: { create: [{ userId: lamia.id, roleInCase: "lead_lawyer" }] },
     },
   });
 
