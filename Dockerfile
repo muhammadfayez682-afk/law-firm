@@ -33,5 +33,5 @@ ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
 
-# عند الإقلاع: طبّق هجرات قاعدة البيانات ثم شغّل الخادم.
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]
+# عند الإقلاع: سكربت start يطبّق الهجرات ثم يشغّل الخادم على منفذ Railway.
+CMD ["npm", "run", "start"]
