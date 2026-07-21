@@ -3,8 +3,9 @@
 FROM node:22-bookworm-slim
 
 # مكتبات النظام التي يحتاجها Chromium (Puppeteer) لتوليد PDF على الخادم.
+# unzip ضروري ليفكّ puppeteer ضغط Chromium الذي يُنزّله أثناء npm ci.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates fonts-liberation \
+      ca-certificates fonts-liberation unzip \
       libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 \
       libcups2 libdrm2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
       libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
