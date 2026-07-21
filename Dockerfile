@@ -2,19 +2,19 @@
 # Next.js 16 + Prisma 7 (driver adapter) + Puppeteer (توليد PDF)
 FROM node:22-bookworm-slim
 
-# مكتبات النظام التي يحتاجها Chromium (Puppeteer) لتوليد PDF على الخادم.
-# unzip ضروري ليفكّ puppeteer ضغط Chromium الذي يُنزّله أثناء npm ci.
+# Chromium من حزم النظام (بدل تنزيل puppeteer له) — أمتن وأسرع، ويتجنّب
+# مشاكل فكّ الضغط. fonts-liberation لخط لاتيني احتياطي (الخط العربي Amiri مضمّن base64).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates fonts-liberation unzip \
-      libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 \
-      libcups2 libdrm2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
-      libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
-      libx11-6 libxcb1 libxext6 libxi6 libxtst6 \
+      ca-certificates fonts-liberation chromium \
     && rm -rf /var/lib/apt/lists/*
+
+# نُخبر puppeteer بألا يُنزّل Chromium، وأن يستخدم نسخة النظام.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
-# ---- 1) التبعيات (يشمل تنزيل Chromium المطابق لإصدار puppeteer) ----
+# ---- 1) التبعيات ----
 # ننسخ ملفات القفل + مخطط Prisma أولًا للاستفادة من ذاكرة طبقات Docker.
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
