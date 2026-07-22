@@ -50,7 +50,9 @@ src/
                                  # sessions, memos, tasks/*, invoices, expenses, users, audit,
                                  # case-flows, account/password، cases/[id]/parties...
   components/
-    cases/                      # CasePipeline، SettlementPanel، ClosureBanner...
+    cases/                      # CasePipeline، SettlementPanel، ClosureBanner،
+                                #  TeamFormationFields + CaseTeamPanel (تشكيل/عرض الفريق)، CaseArchiveActions
+    dashboard/                  # JudicialCalendarWidget (التقويم العدلي المصغّر)
     layout/                     # Sidebar (مجموعات حسب الدور)، TopBar
     modals/                     # NewCase (+أطراف)، NewClient، NewIntake، NewTask، DuplicateWarning، CaseClosure...
     ui/                         # Skeleton، ErrorState، NumberField (حقل رقمي مقيّد)
@@ -58,6 +60,9 @@ src/
     auth.ts                     # إعداد NextAuth (يمنع/يُبطل الحسابات المعطّلة والقديمة)
     prisma.ts                   # عميل Prisma الموحّد
     rbac.ts                     # كل منطق الصلاحيات (انظر القسم 4)
+    caseTeam.ts                   # أدوار فريق القضية + buildTeamMembers والتحقق (ملف نقيّ)
+    caseArchive.ts / .server.ts    # أهلية الأرشفة/الحذف + تنفيذ الحذف النهائي (كرون)
+    judicialCalendar.ts            # العطل الرسمية القضائية وأيام العمل (ملف نقيّ)
     caseFlow.ts / caseClosure.ts  # منطق المسار القضائي وإغلاق القضايا
     memos.ts                      # حالات المذكرات + صلاحيات الكتابة/المراجعة
     tasks.ts                      # حالات/فئات/أولويات المهام + صلاحيات الإسناد والرؤية + حساب التأخّر
@@ -83,7 +88,8 @@ src/
 - منطق الرؤية مطبَّق مرتين بشكل متطابق: `canAccessCase` (تحقق كائن واحد) و`caseVisibilityWhere` (شرط Prisma عند الاستعلام) — يجب إبقاؤهما متزامنين عند أي تعديل مستقبلي. **نفس المبدأ ينطبق على العملاء**: `canAccessClient` + `clientVisibilityWhere` (عميل مرئي إذا كان له قضية مرئية للمستخدم؛ الإدارة والمحاسب يرون الكل).
 - `accountant` لا يمكنه تعديل القضايا أو رفع المستندات، لكنه يدير الفواتير مع `system_admin` (`canManageInvoices`)، ويرى العملاء لأغراض الفوترة دون تفاصيل قضاياهم.
 - صلاحيات حصرية لمسؤول النظام (`isSystemAdmin` / `canManageUsers` / `canViewAuditLog`): اعتماد/رفض الإغلاق وإعادة الفتح، إدارة المستخدمين (`/settings/users`)، وسجل التدقيق (`/audit`). إعدادات المسارات القضائية (`/settings/case-flows`) مقيّدة بـ `isManagement`.
-- **أدوار فريق القضية** (`CaseTeamRole`): `supervisor` / `lawyer` / `researcher` (سابقًا `lead`/`assistant`). و`CASE_HANDLER_ROLES` = الأدوار التي تُسند إليها القضايا كمحامٍ مسؤول وتظهر في تقارير الأداء (`system_admin`, `supervisor`, `lawyer`).
+- **أدوار فريق القضية** (`CaseTeamRole`): `lead_supervisor` / `co_supervisor` / `lead_lawyer` / `co_lawyer` / `researcher` — انظر «تشكيل فريق القضية الكامل» أدناه (سابقًا `supervisor`/`lawyer`/`researcher`، وقبلها `lead`/`assistant`). و`CASE_HANDLER_ROLES` = أدوار **المستخدم** التي تُسند إليها القضايا كمحامٍ مسؤول وتظهر في تقارير الأداء (`system_admin`, `supervisor`, `lawyer`).
+- ⚠️ **لا تخلط بين `UserRole` و`CaseTeamRole`**: `supervisor`/`lawyer`/`researcher` قيم في **`UserRole`** (دور المستخدم في المكتب)، بينما دور العضو داخل قضية بعينها هو `CaseTeamRole` (`lead_lawyer`...). عضوية الفريق في `canAccessCase`/`caseVisibilityWhere` **لا تنظر إلى الدور** — مجرد العضوية تكفي للوصول.
 - الشريط الجانبي (`Sidebar`) يبني مجموعاته من `role` عبر دوال `rbac` مباشرة، فلا تظهر روابط لا يملك الدور صلاحيتها.
 - الحسابات تُعطَّل تعطيلًا ناعمًا (`User.isActive`) ولا تُحذف — الحساب المعطّل يُمنع من تسجيل الدخول في `auth.ts`، مع حماية بقاء **مسؤول نظام** نشط واحد على الأقل وعدم تعطيل الذات.
 
@@ -268,12 +274,14 @@ src/
 - الشريط الجانبي صار يبني مجموعاته حسب الدور: الاستلام / إدارة القضايا (+الجلسات +المذكرات) / الأدوات / المالية (مسؤول نظام+محاسب) / الإدارة (مسؤول نظام) / الحساب (الجميع).
 - **تحديث الأدوار للهيكل الفعلي** (6 أدوار: `system_admin`/`supervisor`/`lawyer`/`researcher`/`secretary`/`accountant`) واستبدال `partner`/`senior_lawyer` في كل الكود وقاعدة البيانات. `seed.ts` يزرع 7 مستخدمين فعليين (`@qudum.sa`، كلمة المرور `Test1234`): **أنس الغامدي، عبدالرحمن الزهراني** (مسؤولا نظام)، **لمياء البردي، سحر السالمي، عمر الثمالي** (محامون)، **سلطان النمري، يزيد الغامدي** (باحثان) — بقضايا موزّعة على المحامين الثلاثة وباحثَين مسندَين للفرق.
 - **نظام اعتماد المذكرات** (`LegalMemo`, `MemoReview`): صفحة `/memos` (قائمة مفلترة + بطاقات ملخص حسب الدور)، `/memos/new` و`/memos/[id]` (كتابة/تعديل للباحث، مراجعة/اعتماد/تقديم للمحامي، سجل مراجعات)، 5 مسارات API (list/create, detail/edit, submit, review, court-submit)، وقسم "المذكرات" في صفحة القضية. مُختبَر عبر HTTP: دورة كاملة (كتابة ← إرسال ← طلب تعديلات ← إعادة إرسال ← اعتماد ← تقديم للمحكمة) + كل حواجز الأدوار.
-- **نظام الإشعارات الكامل** (`Notification`, `NotificationPreference`، 38 نوعًا/4 قنوات): بنية قناة-جاهزة (in_app فعّال + email/sms/whatsapp stubs)، دالة موحّدة `sendNotification` + أغلفة آمنة، مُطلقات مدمجة في مسارات الاستلام/المذكرات/القضايا/الجلسات/المهام، مهام مجدولة (`checkTimeSensitiveNotifications` + `/api/cron/notifications` بـ `CRON_SECRET`)، جرس polling (30ث) بـ dropdown+toast، صفحة `/notifications`، صفحة تفضيلات `/settings/notifications`، وأداة `/dev/trigger-reminders`. القرار: Polling لا SSE (انظر القسم 4). مُختبَر عبر HTTP: 8 سيناريوهات (استلام/مذكرة/إغلاق/جرس/قراءة/تفضيلات/كرون).
+- **نظام الإشعارات الكامل** (`Notification`, `NotificationPreference`، 49 نوعًا/4 قنوات): بنية قناة-جاهزة (in_app فعّال + email/sms/whatsapp stubs)، دالة موحّدة `sendNotification` + أغلفة آمنة، مُطلقات مدمجة في مسارات الاستلام/المذكرات/القضايا/الجلسات/المهام، مهام مجدولة (`checkTimeSensitiveNotifications` + `/api/cron/notifications` بـ `CRON_SECRET`)، جرس polling (30ث) بـ dropdown+toast، صفحة `/notifications`، صفحة تفضيلات `/settings/notifications`، وأداة `/dev/trigger-reminders`. القرار: Polling لا SSE (انظر القسم 4). مُختبَر عبر HTTP: 8 سيناريوهات (استلام/مذكرة/إغلاق/جرس/قراءة/تفضيلات/كرون).
 - **نظام التعريفات الموحّد** (`fieldDefinitions` + `FieldTooltip`/`DefinedField`): قاموس مركزي لكل المصطلحات القانونية الغامضة، tooltips بالتحويم والنقر (بلا مكتبة خارجية) مطبّقة في النماذج، صفحة `/glossary` مرجعية بالبحث والفئات، ورسائل خطأ تعليمية موحّدة (`VALIDATION_MESSAGES`). مُتحقَّق بصريًا (القاموس + tooltip الطرف المقابل).
 - **الوكالة مرنة التوقيت** (`pending_agency`): تفعيل القضية دون وكالة مع حظر جلسات المحكمة حتى صدورها، مودال إضافة الوكالة لاحقًا + بانر، تنبيهات متدرّجة (3/7/14 يوم)، بطاقة لوحة تحكم + تقرير وكالات، وسؤال الوكالة في نموذج التفعيل. مُختبَر عبر HTTP (10/10) + تحقق بصري للبانر (انظر القسم 4).
 - **نظام التعديل الموحّد + توثيق التغييرات** (`EntityChangeLog`, `ChangeReason`): كل تعديل كيان يتطلب سببًا وملاحظة ≥30 حرفًا ويُسجَّل حقلًا-بحقل، مع مصفوفة صلاحيات (`canEditField`) وقفل حسب حالة القضية، مودال تعديل عام + سجل تعديلات في صفحتي القضية والعميل، APIs للقضية/العميل/الوكالة، مذكرة تكميلية للمعتمدة، وتقرير تعديلات + CSV. مُختبَر عبر HTTP (12/12). (انظر القسم 4.)
 - **التقويم العدلي** (`judicialCalendar.ts` + `JudicialCalendarWidget`): مصدر عطل رسمية نقيّ، ودجت أسبوعي في لوحة التحكم حسب الدور، تلوين العطل في `/calendar`، حظر جدولة الجلسات في العطل (يشمل كامل مدة العيد)، وتحذير مهلة التسوية 21 يومًا إن صادفت عطلة. مُختبَر عبر HTTP. (انظر القسم 4.)
 - **أرشفة وحذف القضايا** (`caseArchive.ts`/`.server.ts`): أرشفة (مسؤول/مشرف أي مؤهّلة، محامٍ قضاياه) واسترجاع (مسؤول/مشرف) وحذف نهائي (مسؤول النظام فقط بضوابط: مؤرشفة + بلا جلسات منعقدة/فواتير مدفوعة + ≥90 يومًا + تأكيد نصّي حرفي + سبب ≥50)، حذف ناعم ثم شبكة أمان كرون تحذف فعليًا بعد 30 يومًا، تبويبات نشطة/مؤرشفة/محذوفة، واستثناء من التقارير والرؤية. مُختبَر عبر HTTP. (انظر القسم 4.)
+- **تشكيل فريق القضية الكامل** (`caseTeam.ts` + `TeamFormationFields`/`CaseTeamPanel`): عند التفعيل يُشكَّل فريق (مشرف اختياري + محامٍ رئيسي إلزامي + محامون مساعدون وباحثون بعدد مفتوح) بدل محامٍ واحد، مع مزامنة `responsibleLawyerId`، وتعديل الفريق لاحقًا بإشعارات وaudit. مُختبَر عبر HTTP (12/12). (انظر القسم 4.)
+- **النشر على Railway**: `Dockerfile` (Chromium من النظام لـ Puppeteer) + `railway.json` + `.dockerignore` + `DEPLOY.md`، والهجرات تُطبَّق عند إقلاع الحاوية. النظام يعمل فعليًا على Railway. (انظر قسم «النشر» أدناه.)
 - `npm run build` نظيف بدون أخطاء TypeScript أو تحذيرات بناء.
 
 ## 6. ما تبقى من مهام (خارطة الطريق)
@@ -281,16 +289,29 @@ src/
 بالترتيب المقترح:
 
 1. **مزامنة ناجز/معين**: استيراد مواعيد الجلسات من التقويم الرسمي (ناجز/معين) تلقائيًا. (أساس التقويم العدلي — العطل الرسمية وحظر الجدولة فيها — **مُنجز**، انظر القسم 4.)
-2. **Cloudflare R2 / تخزين سحابي**: ترحيل رفع المستندات (`public/uploads` و`public/uploads/intake`) إلى تخزين سحابي قبل أي نشر متعدد الخوادم — **لا يوجد `@aws-sdk/client-s3` ولا `src/lib/r2.ts` حاليًا**، مع تعليق `TODO` في نقاط الكتابة.
-3. **النشر (Deployment)**: إعداد بيئة الإنتاج (قاعدة بيانات مُدارة، متغيرات البيئة، `NEXTAUTH_SECRET`، `CRON_SECRET`، جدولة `/api/cron/notifications`، تشغيل Puppeteer على الخادم، وCI). كل التطوير حتى الآن محلي.
+2. **Cloudflare R2 / تخزين سحابي — ⚠️ صار عاجلًا بعد النشر**: المستندات تُكتب على قرص الحاوية (`public/uploads`) وهو **عابر على Railway — يُمحى عند كل إعادة نشر**. الحل المؤقت: ربط **Railway Volume** على `/app/public/uploads`؛ والأصح: الترحيل إلى R2 (**لا يوجد `@aws-sdk/client-s3` ولا `src/lib/r2.ts` حاليًا**، مع تعليق `TODO` في نقاط الكتابة).
+3. **جدولة الكرون على Railway**: إنشاء Cron يستدعي `GET /api/cron/notifications` بترويسة `x-cron-secret` دوريًا (كل ساعة).
+4. **CI + اختبارات آلية**: لا يوجد pipeline ولا اختبارات (unit/integration) حتى الآن.
 
-> **مُنجز حديثًا** (خرج من خارطة الطريق): **التقويم العدلي** (العطل الرسمية + ودجت لوحة التحكم + حظر الجدولة في العطل + تحذير مهلة التسوية)، **أرشفة/حذف القضايا** (أرشفة/استرجاع/حذف نهائي بضوابط + شبكة أمان كرون 30 يومًا)، **الخدمات القانونية**، و**نظام المهام**. (انظر القسم 4 و5.)
+> **مُنجز حديثًا** (خرج من خارطة الطريق): **النشر على Railway** (انظر القسم «النشر» أدناه)، **تشكيل فريق القضية الكامل**، **التقويم العدلي**، **أرشفة/حذف القضايا**، **الخدمات القانونية**، و**نظام المهام**. (انظر القسم 4 و5.)
 
 ### نواقص أصغر معروفة
 - تفعيل `twoFaEnabled` (حقل في `User` بلا تنفيذ).
 - لا اختبارات آلية (unit/integration) — كل التحقق يدوي عبر `npm run build` وفحص HTTP.
 - **سجل التدقيق جزئي**: يسجّل `create`/`update` فقط — لا `view` (فتح المستندات) ولا حذف فعلي (النظام يؤرشف). لا يوجد `DocumentAccessLog`.
 - **لا توجد صفحة مستندات مستقلة** (`/documents`) — المستندات ضمن صفحة القضية فقط.
+
+## النشر (Railway) — `Dockerfile` + `railway.json` + `DEPLOY.md`
+
+النظام **منشور فعليًا على Railway** (دليل الخطوات الكامل في `DEPLOY.md` بجذر المشروع).
+
+- **البنّاء = DOCKERFILE وليس Nixpacks** ⚠️: قرار مقصود. Nixpacks يكسر Puppeteer. الصورة `node:22-bookworm-slim` تثبّت **Chromium من حزم النظام** وتضبط `PUPPETEER_SKIP_DOWNLOAD=true` + `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium` — فلا يُنزّل puppeteer متصفحًا أثناء البناء (كان يفشل بـ «no zip archiver is available»). **لا تُحوّل `railway.json` إلى NIXPACKS.**
+- **أوامر npm**: `build` = `prisma generate && next build` · `start` = `prisma migrate deploy && next start -p ${PORT:-3000}` (الهجرات تُطبَّق عند **إقلاع الحاوية**، لا أثناء البناء — لأن `postgres.railway.internal` لا يكون متاحًا وقت البناء) · `postinstall` = `prisma generate`.
+- **فحص الصحة**: `GET /api/auth/csrf` (لا يمسّ قاعدة البيانات).
+- **متغيّرات البيئة المطلوبة**: `DATABASE_URL` (**يجب أن يكون مرجعًا** `${{Postgres.DATABASE_URL}}` وليس نصًا مكتوبًا — النص المكتوب يسبب `P1000: Authentication failed`)، `NEXTAUTH_SECRET`، `NEXTAUTH_URL` (النطاق العام بعد Generate Domain)، `CRON_SECRET`، `NODE_ENV=production`.
+- **`.dockerignore` يستثني `.env`** — لا تُبنى الأسرار داخل الصورة أبدًا.
+- **مزالق واجهناها فعليًا**: (1) تحويل البنّاء لـ Nixpacks → فشل Puppeteer؛ (2) `DATABASE_URL` بقيمة `localhost` أو كلمة مرور مكتوبة → `P1000`؛ (3) عدم تطبيق تغييرات المتغيّرات (شارة «N Changes» تبقى معلّقة بلا Deploy)؛ (4) كلمة مرور Postgres في الحجم لا تطابق المتغيّر → أعِد إنشاء خدمة Postgres (آمن ما دامت الهجرات لم تُطبَّق بعد).
+- **البذور في الإنتاج**: `railway run npm run seed` (أول مرة فقط) — ⚠️ كلمات مرور تجريبية (`Test1234`)، **غيّرها فورًا** من `/settings/account`.
 
 ## الملاحظات التقنية المهمة
 
@@ -315,13 +336,13 @@ src/
 
 `npm run build` يستخدم client محدّثًا دائمًا، فالخطأ يظهر فقط في dev.
 
-## 7. لقطة حالة فعلية (فحص 2026-07-13)
+## 7. لقطة حالة فعلية (آخر تحديث 2026-07-21)
 
 فُحص المشروع بالكامل (`prisma migrate status`, `npm run build`, بذر البيانات، وتحقق HTTP للدورات الكاملة). النتيجة:
 
 | البند | الحالة | ملاحظات |
 |---|---|---|
-| قاعدة البيانات (26 model) | ✅ | لا migrations معلّقة (13 مطبّقة)؛ آخرها `dup_lookup_indexes` |
+| قاعدة البيانات (34 model) | ✅ | لا migrations معلّقة (22 مطبّقة)؛ آخرها `add_case_team_updated_notification` |
 | فحص التكرار + تحقق صارم | ✅ | جوال 10 خانات، تحذير 409 قابل للتجاوز، بانر استلام حيّ، أداة dev — مُختبَر عبر HTTP |
 | الأدوار الفعلية (6 أدوار) | ✅ | استُبدل `partner`/`senior_lawyer` كليًّا؛ 7 مستخدمين مزروعين + تحصين الجلسات |
 | نظام المهام (Task/TaskComment) | ✅ | جدول+كانبان، ترقيم `TSK`، صلاحيات إسناد بالفريق، دورة الحالة، مُختبَر عبر HTTP |
@@ -338,11 +359,15 @@ src/
 | الجلسات / التدقيق / المستخدمون / الفواتير | ✅ | صفحات مركزية كاملة |
 | تغيير كلمة المرور + تحقق الأرقام | ✅ | `/settings/account` + `validators.ts` |
 | اكتمال أحداث سجل التدقيق | ⚠️ | create/update فقط، بلا view |
-| نظام الإشعارات (Notification/Preference) | ✅ | Polling 30ث، 38 نوعًا، محوّلات قنوات جاهزة للبريد، مُطلقات مدمجة + كرون، جرس+صفحة+تفضيلات، مُختبَر عبر HTTP (8 سيناريوهات) |
+| نظام الإشعارات (Notification/Preference) | ✅ | Polling 30ث، 49 نوعًا، محوّلات قنوات جاهزة للبريد، مُطلقات مدمجة + كرون، جرس+صفحة+تفضيلات، مُختبَر عبر HTTP (8 سيناريوهات) |
 | التقويم العدلي (عطل + ودجت + حظر جدولة) | ✅ | `judicialCalendar.ts` + `JudicialCalendarWidget`، حظر جلسات العطل، تحذير مهلة التسوية 21 يومًا، مُختبَر عبر HTTP |
 | أرشفة/حذف القضايا | ✅ | أرشفة/استرجاع/حذف نهائي بضوابط صارمة + شبكة أمان كرون 30 يومًا + تبويبات + استثناء من التقارير، مُختبَر عبر HTTP |
 | الخدمات القانونية (`LegalService`) | ✅ | وحدة مستقلة عن القضايا (دفعة 1) |
+| تشكيل فريق القضية الكامل | ✅ | `CaseTeamRole` بـ5 أدوار + `caseTeam.ts` + `TeamFormationFields`/`CaseTeamPanel` + `PATCH /api/cases/[id]/team`، مُختبَر عبر HTTP (12/12) |
+| النشر (Railway) | ✅ | Dockerfile (Chromium من النظام) + `railway.json` + `DEPLOY.md`؛ الهجرات تُطبَّق عند الإقلاع |
+| رفع المستندات في الإنتاج | ⚠️ | قرص الحاوية **عابر** — يحتاج Railway Volume أو ترحيل R2 (القسم 6) |
+| جدولة الكرون على Railway | ❌ | تحتاج إنشاء Cron يستدعي `/api/cron/notifications` |
 | مزامنة ناجز/معين | ❌ | خارطة الطريق (القسم 6) |
 | صفحة مستندات مستقلة / `DocumentAccessLog` | ❌ | غير موجودة |
-| Cloudflare R2 / النشر / 2FA / اختبارات آلية | ❌ | لاحقًا |
+| Cloudflare R2 / 2FA / اختبارات آلية / CI | ❌ | لاحقًا |
 | `npm run build` | ✅ | ينجح بلا أخطاء TypeScript |
