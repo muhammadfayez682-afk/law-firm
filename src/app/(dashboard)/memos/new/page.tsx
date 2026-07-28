@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { caseVisibilityWhere } from "@/lib/rbac";
+import { caseVisibilityWhere, canPerformOnCase, casePermissionInclude } from "@/lib/rbac";
 import { canAuthorMemo } from "@/lib/memos";
 import { MemoForm } from "../MemoForm";
 
@@ -14,24 +14,50 @@ export default async function NewMemoPage({
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
 
-  if (!canAuthorMemo(session.user.role)) {
+  const { caseId: rawCaseId, sessionId } = await searchParams;
+
+  // القضية المعنية: من caseId مباشرة، أو من جلسة (sessionId) في سياق مذكرة الجلسة.
+  let contextCaseId = rawCaseId ?? null;
+  if (!contextCaseId && sessionId) {
+    const s = await prisma.session.findUnique({ where: { id: sessionId }, select: { caseId: true } });
+    contextCaseId = s?.caseId ?? null;
+  }
+
+  // ===== البوّابة =====
+  // مع سياق قضية: يُسمح لمن يملك write_memo عليها (باحث/مسؤول/محامٍ رئيسي/مُفوَّض).
+  // بلا سياق قضية: يبقى القيد على الباحث/المسؤول (مذكرة عامة).
+  let allowed = false;
+  let contextCase: { id: string; title: string; internalNumber: string } | null = null;
+  if (contextCaseId) {
+    const caseData = await prisma.case.findUnique({
+      where: { id: contextCaseId },
+      include: casePermissionInclude,
+    });
+    if (caseData && canPerformOnCase(session.user, caseData, "write_memo")) {
+      allowed = true;
+      contextCase = { id: caseData.id, title: caseData.title, internalNumber: caseData.internalNumber };
+    }
+  } else {
+    allowed = canAuthorMemo(session.user.role);
+  }
+
+  if (!allowed) {
     return (
       <div className="rounded-xl border border-red-100 bg-red-50 p-8 text-center text-red-700">
-        كتابة المذكرات متاحة للباحث القانوني فقط.
+        لا تملك صلاحية كتابة مذكرة{contextCaseId ? " لهذه القضية" : ""}.
       </div>
     );
   }
 
-  const { caseId, sessionId } = await searchParams;
-
-  const cases = await prisma.case.findMany({
-    where: caseVisibilityWhere(session.user),
-    orderBy: { createdAt: "desc" },
-    select: { id: true, title: true, internalNumber: true },
-  });
-
-  // تحقّق أن القضية المُمرَّرة ضمن القضايا المرئية قبل تمريرها كقيمة افتراضية.
-  const defaultCaseId = caseId && cases.some((c) => c.id === caseId) ? caseId : undefined;
+  // قائمة القضايا للاختيار (عند غياب سياق قضية)؛ ومع السياق نثبّت القضية المعنية.
+  const cases = contextCase
+    ? [contextCase]
+    : await prisma.case.findMany({
+        where: caseVisibilityWhere(session.user),
+        orderBy: { createdAt: "desc" },
+        select: { id: true, title: true, internalNumber: true },
+      });
+  const defaultCaseId = contextCase?.id ?? undefined;
 
   return (
     <div className="space-y-6">

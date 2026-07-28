@@ -227,7 +227,12 @@ export function hasBaseCasePermission(
         user.role === "researcher"
       );
     case "write_memo":
-      return user.role === "system_admin" || user.role === "researcher";
+      // الباحث/المسؤول + المحامي الرئيسي (المسؤول) لقضيته؛ الباقون عبر تفويض write_memo.
+      return (
+        user.role === "system_admin" ||
+        user.role === "researcher" ||
+        caseData.responsibleLawyerId === user.id
+      );
     case "manage_timeline":
       // مُنشئ القضية + المحامي الرئيسي + مسؤول النظام (الباقون: عرض فقط).
       return (

@@ -11,7 +11,7 @@ import {
   canPerformOnCase,
 } from "@/lib/rbac";
 import { getAmicableSettlementPlatform, getCaseFlowStages, getFirstStage } from "@/lib/caseFlow";
-import { canAuthorMemo, canReviewMemo } from "@/lib/memos";
+import { canReviewMemo } from "@/lib/memos";
 import { displayTaskStatus, getAssignableUsers } from "@/lib/tasks";
 import { canArchiveCase, canRestoreCase, checkDeleteEligibility } from "@/lib/caseArchive";
 import { ALL_DELEGATED_PERMISSIONS, DELEGATED_PERMISSION_LABELS_AR } from "@/lib/caseDelegation";
@@ -211,7 +211,7 @@ export default async function CaseDetailPage({
       userRole={session.user.role}
       isSystemAdmin={isSystemAdmin(session.user.role)}
       memos={memos}
-      canAddMemo={canAuthorMemo(session.user.role)}
+      canAddMemo={canPerformOnCase(session.user, caseData, "write_memo")}
       pendingMemoReview={pendingMemoReview}
       tasks={tasks}
       taskUsers={taskUsers}

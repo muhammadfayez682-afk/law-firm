@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, resolveCasePermission } from "@/lib/rbac";
-import { canAuthorMemo, memoVisibilityWhere } from "@/lib/memos";
+import { memoVisibilityWhere } from "@/lib/memos";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
