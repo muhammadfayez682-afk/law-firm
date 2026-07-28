@@ -4,8 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import type { TaskAssigneeStatus, TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
+import type { TaskAssigneePermission, TaskAssigneeStatus, TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
 import {
+  TASK_ASSIGNEE_PERMISSION_LABELS_AR,
   TASK_CATEGORY_LABELS_AR,
   TASK_CATEGORY_STYLES,
   TASK_PRIORITY_LABELS_AR,
@@ -42,9 +43,17 @@ type TaskData = {
   serviceTitle: string | null;
   intakeId: string | null;
   intakeRequestNumber: string | null;
-  assignees: { userId: string; name: string; status: TaskAssigneeStatus; completionNote: string | null; completedAt: string | null }[];
+  assignees: { userId: string; name: string; permission: TaskAssigneePermission; status: TaskAssigneeStatus; completionNote: string | null; completedAt: string | null }[];
   myStatus: TaskAssigneeStatus | null;
+  myPermission: TaskAssigneePermission | null;
+  parentTaskId: string | null;
   comments: { id: string; content: string; authorName: string; createdAt: string }[];
+};
+
+const ASSIGNEE_PERMISSION_STYLES: Record<TaskAssigneePermission, string> = {
+  view: "bg-gray-100 text-gray-500",
+  edit: "bg-amber-100 text-amber-700",
+  complete: "bg-navy/10 text-navy",
 };
 
 const ASSIGNEE_STATUS_LABELS: Record<TaskAssigneeStatus, string> = {
@@ -74,6 +83,8 @@ export function TaskDetailView({
   const [showComplete, setShowComplete] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const isClosed = task.status === "completed" || task.status === "cancelled";
+  const isLocked = task.status === "rejected";
+  const iCanComplete = task.myPermission === "complete";
 
   /** تحديث حالتي الخاصة كمُسند (عبر my-status). */
   async function setMyStatus(status: string, completionNote?: string) {
@@ -113,6 +124,40 @@ export function TaskDetailView({
     }
   }
 
+  /** رفض المهمة وقفلها (للمُنشئ/الإدارة). */
+  async function rejectTask() {
+    if (!confirm("رفض المهمة سيقفلها تمامًا (قراءة فقط). للمتابعة أنشئ نسخة جديدة. متابعة؟")) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "rejected" }),
+      });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) return toast.error(d?.error ?? "تعذّر الرفض.");
+      toast.success("رُفضت المهمة وقُفلت");
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** إنشاء نسخة جديدة من المهمة المرفوضة. */
+  async function recreateTask() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/recreate`, { method: "POST" });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) return toast.error(d?.error ?? "تعذّر إنشاء النسخة.");
+      toast.success(`أُنشئت نسخة جديدة ${d.taskNumber}`);
+      router.push(`/tasks/${d.id}`);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -134,9 +179,25 @@ export function TaskDetailView({
         <Link href="/tasks" className="text-sm text-gold hover:underline">العودة للمهام</Link>
       </div>
 
+      {/* بانر المهمة المرفوضة (مقفلة) */}
+      {isLocked && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 p-5">
+          <div>
+            <p className="font-semibold text-red-800">🔒 المهمة مرفوضة ومقفلة</p>
+            <p className="mt-1 text-sm text-red-700">لا يمكن تعديل محتواها أو حالتها. أنشئ نسخة جديدة لمتابعة العمل.</p>
+          </div>
+          {canManage && (
+            <button type="button" disabled={busy} onClick={recreateTask}
+              className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60">
+              🔄 إنشاء نسخة جديدة
+            </button>
+          )}
+        </div>
+      )}
+
       {/* أزرار حالتي كمُسند */}
       <div className="flex flex-wrap gap-3">
-        {task.myStatus && !isClosed && task.myStatus !== "completed" && task.myStatus !== "declined" && (
+        {iCanComplete && task.myStatus && !isClosed && !isLocked && task.myStatus !== "completed" && task.myStatus !== "declined" && (
           <>
             {task.myStatus === "pending" && (
               <button type="button" disabled={busy} onClick={() => setMyStatus("in_progress")}
@@ -157,13 +218,19 @@ export function TaskDetailView({
         {task.myStatus === "completed" && (
           <span className="rounded-lg bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700">✓ أنجزتَ نصيبك</span>
         )}
-        {canManage && !isClosed && (
+        {canManage && !isClosed && !isLocked && (
           <button type="button" disabled={busy} onClick={() => setShowEdit(true)}
             className="rounded-lg border border-navy/20 px-5 py-2 text-sm font-medium text-navy hover:bg-navy/5 disabled:opacity-60">
             تعديل
           </button>
         )}
-        {canManage && !isClosed && (
+        {canManage && !isClosed && !isLocked && (
+          <button type="button" disabled={busy} onClick={rejectTask}
+            className="rounded-lg border border-red-300 px-5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60">
+            رفض المهمة
+          </button>
+        )}
+        {canManage && !isClosed && !isLocked && (
           <button type="button" disabled={busy} onClick={cancelTask}
             className="rounded-lg border border-red-300 px-5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60">
             إلغاء المهمة
@@ -177,10 +244,15 @@ export function TaskDetailView({
         <ul className="space-y-2">
           {task.assignees.map((a) => (
             <li key={a.userId} className="rounded-lg border border-black/5 px-4 py-2.5 text-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2">
                 <span className="font-medium text-navy">{a.name}</span>
-                <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${ASSIGNEE_STATUS_STYLES[a.status]}`}>
-                  {ASSIGNEE_STATUS_LABELS[a.status]}
+                <span className="flex items-center gap-1.5">
+                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${ASSIGNEE_PERMISSION_STYLES[a.permission]}`}>
+                    {TASK_ASSIGNEE_PERMISSION_LABELS_AR[a.permission]}
+                  </span>
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${ASSIGNEE_STATUS_STYLES[a.status]}`}>
+                    {ASSIGNEE_STATUS_LABELS[a.status]}
+                  </span>
                 </span>
               </div>
               {a.completionNote && <p className="mt-1 whitespace-pre-wrap text-xs text-foreground/60">{a.completionNote}</p>}

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import type { TaskAssigneeStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { computeTaskStatusFromAssignees } from "@/lib/tasks";
+import { assigneeCanComplete, computeTaskStatusFromAssignees, isTaskLocked } from "@/lib/tasks";
 import { notify } from "@/lib/notifications/send";
 
 type Params = { params: Promise<{ id: string }> };
@@ -26,8 +26,18 @@ export async function POST(request: NextRequest, { params }: Params) {
   const mine = task.assignees.find((a) => a.userId === session.user.id);
   if (!mine) return NextResponse.json({ error: "لست ضمن المُسندين لهذه المهمة" }, { status: 403 });
 
+  if (isTaskLocked(task.status)) {
+    return NextResponse.json({ error: "المهمة مرفوضة ومقفلة — أنشئ نسخة جديدة." }, { status: 403 });
+  }
   if (task.status === "cancelled") {
     return NextResponse.json({ error: "المهمة ملغاة" }, { status: 400 });
+  }
+  // صلاحية «مشاهدة»/«تعديل» لا تملك نصيبًا تُنجزه.
+  if (!assigneeCanComplete(mine)) {
+    return NextResponse.json(
+      { error: "صلاحيتك على هذه المهمة (مشاهدة/تعديل) لا تسمح بتحديث نصيبك" },
+      { status: 403 }
+    );
   }
 
   const body = await request.json();
@@ -49,8 +59,11 @@ export async function POST(request: NextRequest, { params }: Params) {
     },
   });
 
-  // إعادة حساب حالة المهمة الإجمالية.
-  const fresh = await prisma.taskAssignee.findMany({ where: { taskId: id }, select: { status: true } });
+  // إعادة حساب حالة المهمة الإجمالية (المشاهد/المعدّل لا يُحتسبان كمنجِزين).
+  const fresh = await prisma.taskAssignee.findMany({
+    where: { taskId: id },
+    select: { status: true, permission: true },
+  });
   const computed = computeTaskStatusFromAssignees(fresh);
   const wasCompleted = task.status === "completed";
 
@@ -66,6 +79,21 @@ export async function POST(request: NextRequest, { params }: Params) {
   await prisma.auditLog.create({
     data: { userId: session.user.id, action: "update", resourceType: "Task", resourceId: id },
   });
+
+  // إشعار المُنشئ عند إنجاز هذا المكلّف نصيبه (لكل مكلّف).
+  if (status === "completed" && task.assignedById !== session.user.id) {
+    await notify({
+      recipientId: task.assignedById,
+      type: "task_assignee_completed",
+      priority: "normal",
+      title: "مكلّف أنجز نصيبه",
+      message: `أنجز أحد المكلّفين نصيبه من المهمة «${task.title}» (${task.taskNumber}).`,
+      actionUrl: `/tasks/${id}`,
+      resourceType: "Task",
+      resourceId: id,
+      triggeredById: session.user.id,
+    });
+  }
 
   // عند اكتمال المهمة بالكامل لأول مرة → إشعار المُنشئ.
   if (computed.completed && !wasCompleted && task.assignedById !== session.user.id) {

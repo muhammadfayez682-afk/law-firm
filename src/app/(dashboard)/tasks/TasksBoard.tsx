@@ -24,6 +24,7 @@ type TaskRow = {
   priority: TaskPriority;
   assignedToName: string;
   assignedByName: string;
+  assigneeCount: number;
   dueDate: string | null;
   caseId: string | null;
   caseInternalNumber: string | null;
@@ -120,7 +121,14 @@ function TableView({ tasks }: { tasks: TaskRow[] }) {
                     {TASK_CATEGORY_LABELS_AR[t.category]}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-foreground/70">{t.assignedToName}</td>
+                <td className="px-4 py-3 text-foreground/70">
+                  {t.assignedToName}
+                  {t.assigneeCount > 1 && (
+                    <span className=" mr-1.5 inline-flex items-center rounded-full bg-navy/10 px-1.5 py-0.5 text-[11px] text-navy">
+                      👥 {t.assigneeCount}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-foreground/70">{t.assignedByName}</td>
                 <td className="px-4 py-3"><DueCell dueDate={t.dueDate} overdue={t.status === "overdue"} /></td>
                 <td className="px-4 py-3"><PriorityBadge priority={t.priority} /></td>
@@ -183,7 +191,10 @@ function KanbanView({ tasks }: { tasks: TaskRow[] }) {
                   </div>
                   <p className="mb-2 font-mono text-[11px] text-foreground/40" dir="ltr">{t.taskNumber}</p>
                   <div className="flex items-center justify-between text-xs text-foreground/50">
-                    <span>{t.assignedToName}</span>
+                    <span>
+                      {t.assignedToName}
+                      {t.assigneeCount > 1 && <span className="mr-1 text-navy">👥 {t.assigneeCount}</span>}
+                    </span>
                     {t.status === "overdue" ? (
                       <span className="font-semibold text-red-600">متأخرة</span>
                     ) : t.dueDate ? (

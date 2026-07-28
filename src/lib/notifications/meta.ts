@@ -94,6 +94,9 @@ export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
   task_overdue: { label: "مهمة متأخرة", description: "مهمة تجاوزت موعد استحقاقها", icon: "🔴", category: "task", defaultPriority: "urgent" },
   task_completed: { label: "إنجاز مهمة", description: "أُنجزت مهمة أسندتها", icon: "✅", category: "task", defaultPriority: "normal" },
   task_comment_added: { label: "ملاحظة على مهمة", description: "أُضيفت ملاحظة على مهمة", icon: "💬", category: "task", defaultPriority: "normal" },
+  task_assigned_multi: { label: "إسناد مهمة (عدة مكلّفين)", description: "أُسندت إليك مهمة ضمن عدة مكلّفين", icon: "👥", category: "task", defaultPriority: "normal" },
+  task_assignee_completed: { label: "مكلّف أنجز نصيبه", description: "أنجز أحد المكلّفين نصيبه من المهمة", icon: "✅", category: "task", defaultPriority: "normal" },
+  task_recreated: { label: "إعادة إنشاء مهمة", description: "أُعيد إنشاء مهمة مرفوضة كنسخة جديدة", icon: "🔄", category: "task", defaultPriority: "high" },
 
   // الفواتير
   invoice_overdue: { label: "فاتورة متأخرة", description: "فاتورة تجاوزت موعد استحقاقها", icon: "💰", category: "invoice", defaultPriority: "high" },

@@ -845,6 +845,7 @@ enum TaskStatus {
   in_progress
   completed
   cancelled
+  rejected // رُفض العمل — المهمة مقفلة، تُعاد عبر نسخة جديدة (parentTaskId)
   overdue // محسوبة تلقائيًا عند العرض (استحقاق فائت ولم تُنجَز)
 }
 
@@ -902,6 +903,11 @@ model Task {
   // إلغاء ناعم — لا يُحذف السجل فعليًا
   cancelledAt DateTime?
 
+  // نسخة معاد إنشاؤها بعد رفض المهمة (نمط parentMemoId في المذكرات).
+  parentTaskId String?
+  parent       Task?   @relation("TaskRecreation", fields: [parentTaskId], references: [id])
+  recreations  Task[]  @relation("TaskRecreation")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -922,16 +928,23 @@ enum TaskAssigneeStatus {
 }
 
 // مُسند فردي ضمن مهمة متعددة المُسندين — كل مُسند يدير حالته الخاصة.
+enum TaskAssigneePermission {
+  view // مشاهدة فقط
+  edit // تعديل محتوى المهمة
+  complete // إكمال نصيبه (يشمل edit)
+}
+
 model TaskAssignee {
-  id             String             @id @default(uuid())
-  task           Task               @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  id             String                 @id @default(uuid())
+  task           Task                   @relation(fields: [taskId], references: [id], onDelete: Cascade)
   taskId         String
-  user           User               @relation(fields: [userId], references: [id])
+  user           User                   @relation(fields: [userId], references: [id])
   userId         String
-  status         TaskAssigneeStatus @default(pending)
+  permission     TaskAssigneePermission @default(complete)
+  status         TaskAssigneeStatus     @default(pending)
   completedAt    DateTime?
-  completionNote String?            @db.Text
-  createdAt      DateTime           @default(now())
+  completionNote String?                @db.Text
+  createdAt      DateTime               @default(now())
 
   @@unique([taskId, userId])
   @@index([userId, status])
@@ -980,6 +993,9 @@ enum NotificationType {
   case_team_updated // تغيّر تشكيل فريق القضية (إضافة/إزالة عضو)
   delegation_granted // مُنح تفويض صلاحية على قضية
   delegation_revoked // أُلغي تفويض صلاحية على قضية
+  task_assigned_multi // أُسندت إليك مهمة ضمن عدة مكلّفين
+  task_assignee_completed // أنجز أحد المكلّفين نصيبه من المهمة
+  task_recreated // أُعيد إنشاء مهمة مرفوضة كنسخة جديدة
 
   // الجلسات
   session_scheduled

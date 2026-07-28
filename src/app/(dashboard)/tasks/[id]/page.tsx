@@ -66,14 +66,17 @@ export default async function TaskDetailPage({
     serviceTitle: task.service?.title ?? null,
     intakeId: task.intake?.id ?? null,
     intakeRequestNumber: task.intake?.requestNumber ?? null,
+    parentTaskId: task.parentTaskId ?? null,
     assignees: task.assignees.map((a) => ({
       userId: a.userId,
       name: a.user.fullName,
+      permission: a.permission,
       status: a.status,
       completionNote: a.completionNote,
       completedAt: a.completedAt?.toISOString() ?? null,
     })),
     myStatus: myAssignee?.status ?? null,
+    myPermission: myAssignee?.permission ?? null,
     comments: task.comments.map((c) => ({
       id: c.id,
       content: c.content,

@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { TaskCategory, TaskPriority, UserRole } from "@prisma/client";
+import type { TaskAssigneePermission, TaskCategory, TaskPriority, UserRole } from "@prisma/client";
 import {
+  TASK_ASSIGNEE_PERMISSION_LABELS_AR,
   TASK_CATEGORY_LABELS_AR,
   TASK_PRIORITY_LABELS_AR,
 } from "@/lib/tasks";
+
+type AssigneePermission = TaskAssigneePermission;
 import { DefinedField } from "@/components/ui/DefinedField";
 
 const inputClass =
@@ -38,9 +41,14 @@ export function NewTaskModal({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [assigneeIds, setAssigneeIds] = useState<string[]>([currentUserId]);
+  const [perms, setPerms] = useState<Record<string, AssigneePermission>>({ [currentUserId]: "complete" });
 
   function toggleAssignee(uid: string) {
     setAssigneeIds((prev) => (prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]));
+    setPerms((prev) => (prev[uid] ? prev : { ...prev, [uid]: "complete" }));
+  }
+  function setPerm(uid: string, p: AssigneePermission) {
+    setPerms((prev) => ({ ...prev, [uid]: p }));
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -64,7 +72,7 @@ export function NewTaskModal({
           title,
           description: fd.get("description") || null,
           category: fd.get("category"),
-          assigneeIds,
+          assignees: assigneeIds.map((uid) => ({ userId: uid, permission: perms[uid] ?? "complete" })),
           priority: fd.get("priority"),
           caseId: presetCaseId ?? fd.get("caseId") ?? null,
           serviceId: presetServiceId ?? fd.get("serviceId") ?? null,
@@ -141,16 +149,35 @@ export function NewTaskModal({
               المُسندون <span className="text-red-600">*</span>{" "}
               <span className="text-xs text-foreground/50">({assigneeIds.length} مختار)</span>
             </label>
-            <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-black/10 p-2">
-              {users.map((u) => (
-                <label key={u.id} className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-black/5">
-                  <input type="checkbox" checked={assigneeIds.includes(u.id)} onChange={() => toggleAssignee(u.id)} />
-                  <span>
-                    {u.fullName}
-                    {u.id === currentUserId ? " (أنا)" : ""}
-                  </span>
-                </label>
-              ))}
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-black/10 p-2">
+              {users.map((u) => {
+                const checked = assigneeIds.includes(u.id);
+                return (
+                  <div key={u.id} className="flex items-center justify-between gap-2 rounded px-2 py-1 text-sm hover:bg-black/5">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={checked} onChange={() => toggleAssignee(u.id)} />
+                      <span>
+                        {u.fullName}
+                        {u.id === currentUserId ? " (أنا)" : ""}
+                      </span>
+                    </label>
+                    {checked && (
+                      <select
+                        value={perms[u.id] ?? "complete"}
+                        onChange={(e) => setPerm(u.id, e.target.value as AssigneePermission)}
+                        className="rounded border border-black/10 px-1.5 py-0.5 text-xs outline-none focus:border-gold"
+                        title="صلاحية المكلّف"
+                      >
+                        {(["complete", "edit", "view"] as AssigneePermission[]).map((p) => (
+                          <option key={p} value={p}>
+                            {TASK_ASSIGNEE_PERMISSION_LABELS_AR[p]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

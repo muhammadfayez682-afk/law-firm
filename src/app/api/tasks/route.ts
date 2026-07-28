@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import type { Prisma, TaskCategory, TaskPriority, TaskStatus } from "@prisma/client";
+import type { Prisma, TaskAssigneePermission, TaskCategory, TaskPriority, TaskStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, resolveCasePermission } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
-import { canAssignTaskTo, taskVisibilityWhere } from "@/lib/tasks";
+import { canAssignTaskTo, generateTaskNumber, isValidAssigneePermission, taskVisibilityWhere } from "@/lib/tasks";
 import { canAccessService } from "@/lib/services";
 import { notify } from "@/lib/notifications/send";
 
@@ -75,17 +75,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json(tasks);
 }
 
-async function generateTaskNumber(tx: Prisma.TransactionClient): Promise<string> {
-  const year = new Date().getFullYear();
-  const last = await tx.task.findFirst({
-    where: { taskNumber: { startsWith: `TSK-${year}-` } },
-    orderBy: { taskNumber: "desc" },
-    select: { taskNumber: true },
-  });
-  const lastSeq = last ? parseInt(last.taskNumber.split("-")[2] ?? "0", 10) : 0;
-  return `TSK-${year}-${String(lastSeq + 1).padStart(4, "0")}`;
-}
-
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -100,13 +89,23 @@ export async function POST(request: NextRequest) {
   const serviceId: string | null = body.serviceId || null;
   const intakeId: string | null = body.intakeId || null;
 
-  // المُسندون: قائمة (تعدّد) مع سقوط احتياطي لـ assignedToId المفرد للتوافق.
-  const rawAssignees: string[] = Array.isArray(body.assigneeIds)
-    ? body.assigneeIds.filter((x: unknown): x is string => typeof x === "string")
-    : typeof body.assignedToId === "string" && body.assignedToId
-      ? [body.assignedToId]
-      : [];
-  const assigneeIds = [...new Set(rawAssignees)];
+  // المُسندون: قائمة كائنات {userId, permission} (الأحدث)، أو assigneeIds[]، أو assignedToId (توافق).
+  const permissionOf = new Map<string, TaskAssigneePermission>();
+  if (Array.isArray(body.assignees)) {
+    for (const a of body.assignees) {
+      if (a && typeof a.userId === "string") {
+        permissionOf.set(a.userId, isValidAssigneePermission(a.permission) ? a.permission : "complete");
+      }
+    }
+  } else {
+    const raw: string[] = Array.isArray(body.assigneeIds)
+      ? body.assigneeIds.filter((x: unknown): x is string => typeof x === "string")
+      : typeof body.assignedToId === "string" && body.assignedToId
+        ? [body.assignedToId]
+        : [];
+    for (const uid of raw) permissionOf.set(uid, "complete");
+  }
+  const assigneeIds = [...permissionOf.keys()];
 
   if (!title) return NextResponse.json({ error: "عنوان المهمة مطلوب" }, { status: 400 });
   if (!category || !CATEGORIES.includes(category)) {
@@ -198,7 +197,9 @@ export async function POST(request: NextRequest) {
         serviceId,
         intakeId,
         dueDate,
-        assignees: { create: assigneeIds.map((userId) => ({ userId })) },
+        assignees: {
+          create: assigneeIds.map((userId) => ({ userId, permission: permissionOf.get(userId)! })),
+        },
       },
     });
   });
@@ -215,11 +216,12 @@ export async function POST(request: NextRequest) {
 
   // إشعار كل مُسند (عدا المُنشئ).
   const notifPriority = priority === "urgent" ? "urgent" : priority === "high" ? "high" : "normal";
+  const assignType = assigneeIds.length > 1 ? "task_assigned_multi" : "task_assigned";
   for (const uid of assigneeIds) {
     if (uid === session.user.id) continue;
     await notify({
       recipientId: uid,
-      type: "task_assigned",
+      type: assignType,
       priority: notifPriority,
       title: "أُسندت إليك مهمة",
       message: `المهمة «${created.title}» (${created.taskNumber}).`,

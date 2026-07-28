@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canManageTask } from "@/lib/tasks";
+import { canManageTask, isTaskLocked } from "@/lib/tasks";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,6 +18,9 @@ export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const task = await prisma.task.findUnique({ where: { id } });
   if (!task) return NextResponse.json({ error: "المهمة غير موجودة" }, { status: 404 });
+  if (isTaskLocked(task.status)) {
+    return NextResponse.json({ error: "المهمة مرفوضة ومقفلة — أنشئ نسخة جديدة." }, { status: 403 });
+  }
 
   const body = await request.json();
   const status = body.status;

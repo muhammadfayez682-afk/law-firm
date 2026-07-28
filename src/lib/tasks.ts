@@ -1,4 +1,4 @@
-import type { Prisma, TaskAssigneeStatus, TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
+import type { Prisma, TaskAssigneePermission, TaskAssigneeStatus, TaskCategory, TaskPriority, TaskStatus, UserRole } from "@prisma/client";
 import type { SessionUser } from "@/lib/rbac";
 import { isManagement } from "@/lib/rbac";
 
@@ -7,6 +7,7 @@ export const TASK_STATUS_LABELS_AR: Record<TaskStatus, string> = {
   in_progress: "قيد التنفيذ",
   completed: "منجزة",
   cancelled: "ملغاة",
+  rejected: "مرفوضة",
   overdue: "متأخرة",
 };
 
@@ -15,7 +16,28 @@ export const TASK_STATUS_STYLES: Record<TaskStatus, string> = {
   in_progress: "bg-blue-100 text-blue-700",
   completed: "bg-emerald-100 text-emerald-700",
   cancelled: "bg-gray-100 text-gray-500",
+  rejected: "bg-red-200 text-red-800",
   overdue: "bg-red-100 text-red-700",
+};
+
+export const TASK_ASSIGNEE_STATUS_LABELS_AR: Record<TaskAssigneeStatus, string> = {
+  pending: "لم يبدأ",
+  in_progress: "قيد التنفيذ",
+  completed: "أنجز نصيبه",
+  declined: "اعتذر",
+};
+
+export const TASK_ASSIGNEE_STATUS_STYLES: Record<TaskAssigneeStatus, string> = {
+  pending: "bg-gray-200 text-gray-700",
+  in_progress: "bg-blue-100 text-blue-700",
+  completed: "bg-emerald-100 text-emerald-700",
+  declined: "bg-amber-100 text-amber-700",
+};
+
+export const TASK_ASSIGNEE_PERMISSION_LABELS_AR: Record<TaskAssigneePermission, string> = {
+  view: "مشاهدة",
+  edit: "تعديل",
+  complete: "إكمال",
 };
 
 export const TASK_PRIORITY_LABELS_AR: Record<TaskPriority, string> = {
@@ -70,9 +92,52 @@ export function isTaskOverdue(task: OverdueInput, now: Date = new Date()): boole
   return new Date(task.dueDate).getTime() < now.getTime();
 }
 
-/** الحالة المعروضة: تتحول إلى «متأخرة» تلقائيًا عند فوات الاستحقاق. */
+/** الحالة المعروضة: تتحول إلى «متأخرة» تلقائيًا عند فوات الاستحقاق (لا تمسّ المرفوضة/الملغاة). */
 export function displayTaskStatus(task: OverdueInput, now?: Date): TaskStatus {
   return isTaskOverdue(task, now) ? "overdue" : task.status;
+}
+
+// ── المكلّفون: الحالة والصلاحية ──────────────────────────────
+
+type AssigneeLike = { status: TaskAssigneeStatus; permission: TaskAssigneePermission };
+
+/** هل أنجز المكلّف نصيبه؟ */
+export function isAssigneeComplete(a: { status: TaskAssigneeStatus }): boolean {
+  return a.status === "completed";
+}
+
+/** صلاحية تعديل محتوى المهمة (edit أو complete). */
+export function assigneeCanEdit(a: { permission: TaskAssigneePermission }): boolean {
+  return a.permission === "edit" || a.permission === "complete";
+}
+
+/** صلاحية إكمال النصيب (complete فقط). */
+export function assigneeCanComplete(a: { permission: TaskAssigneePermission }): boolean {
+  return a.permission === "complete";
+}
+
+/** هل المهمة مقفلة (مرفوضة)؟ يُمنع أي تعديل عليها عدا إنشاء نسخة جديدة. */
+export function isTaskLocked(status: TaskStatus): boolean {
+  return status === "rejected";
+}
+
+/** التحقق من قيمة صلاحية مكلّف واردة من الواجهة. */
+export function isValidAssigneePermission(v: unknown): v is TaskAssigneePermission {
+  return v === "view" || v === "edit" || v === "complete";
+}
+
+export type { AssigneeLike };
+
+/** ترقيم مهمة جديدة بأسلوب أكبر رقم (يتحمّل الفجوات): TSK-YYYY-NNNN. */
+export async function generateTaskNumber(tx: Prisma.TransactionClient): Promise<string> {
+  const year = new Date().getFullYear();
+  const last = await tx.task.findFirst({
+    where: { taskNumber: { startsWith: `TSK-${year}-` } },
+    orderBy: { taskNumber: "desc" },
+    select: { taskNumber: true },
+  });
+  const lastSeq = last ? parseInt(last.taskNumber.split("-")[2] ?? "0", 10) : 0;
+  return `TSK-${year}-${String(lastSeq + 1).padStart(4, "0")}`;
 }
 
 // ── الصلاحيات ──────────────────────────────────────────────
@@ -110,12 +175,16 @@ export function canAccessTask(
  * - معلقة: لم يبدأ أحد.
  */
 export function computeTaskStatusFromAssignees(
-  assignees: { status: TaskAssigneeStatus }[]
+  assignees: { status: TaskAssigneeStatus; permission?: TaskAssigneePermission }[]
 ): { status: "pending" | "in_progress" | "completed"; completed: boolean } {
-  const active = assignees.filter((a) => a.status !== "declined");
-  const completed = active.filter((a) => a.status === "completed").length;
-  const anyStarted = assignees.some((a) => a.status === "in_progress" || a.status === "completed");
-  if (active.length > 0 && completed === active.length) {
+  // «المنجِزون» = أصحاب صلاحية الإكمال غير المنسحبين (المشاهد/المعدّل ليسوا أصحاب نصيب).
+  // للتوافق مع المهام القديمة (بلا permission)، نعتبر غياب الصلاحية = complete.
+  const doers = assignees.filter(
+    (a) => (a.permission ?? "complete") === "complete" && a.status !== "declined"
+  );
+  const completed = doers.filter((a) => a.status === "completed").length;
+  const anyStarted = doers.some((a) => a.status === "in_progress" || a.status === "completed");
+  if (doers.length > 0 && completed === doers.length) {
     return { status: "completed", completed: true };
   }
   if (anyStarted) return { status: "in_progress", completed: false };
