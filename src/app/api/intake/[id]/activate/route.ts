@@ -205,9 +205,19 @@ export async function POST(request: NextRequest, { params }: Params) {
           clientId,
           // المحامي الرئيسي يُزامَن مع responsibleLawyerId للتوافق مع بقية النظام.
           responsibleLawyerId: leadLawyerId,
+          createdById: session.user.id, // مفعّل القضية (أساس manage_timeline)
           conflictCheckConfirmed: true,
           clientPartyRole,
           notes: `مُنشأة من طلب الاستلام ${intake.requestNumber}.`,
+          // القالب المبدئي للتسلسل الزمني (4 أحداث template).
+          timeline: {
+            create: [
+              { sequence: 1, title: "الدراسة الأولية (بعد اعتمادها)", source: "template", createdById: session.user.id },
+              { sequence: 2, title: "الإجراء الأول", source: "template", createdById: session.user.id },
+              { sequence: 3, title: "الإجراء الثاني", source: "template", createdById: session.user.id },
+              { sequence: 4, title: "الإجراء الثالث", source: "template", createdById: session.user.id },
+            ],
+          },
           team: { create: teamMembers.map((m) => ({ userId: m.userId, roleInCase: m.roleInCase })) },
           parties: {
             create: [

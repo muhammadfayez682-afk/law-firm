@@ -102,6 +102,14 @@ src/
 - **العرض**: مكوّن `CaseNumberDisplay` (`inline`/`card`/`detailed`) — شارة لونية حسب المصدر (محكمة أخضر · قوى/تراضي أزرق · داخلي رمادي)، أرقام إنجليزية دائمًا (`toEnglishDigits`, `dir="ltr"`). مستخدم في قائمة القضايا (عمود «الرقم») وصفحة التفاصيل (رقم رسمي بارز أعلى العنوان + بطاقة «أرقام القضية» بالجدول التفصيلي + بانر «لم يُضَف رقم المحكمة» + `EditCourtNumberModal`). النماذج: مفتاح autofill جديد `primaryCaseNumber` لحقول «رقم القضية» العامة (بينما «رقم ملف العميل» يبقى `internalNumber` و«رقم الدعوى» في تقرير الجلسة يبقى `courtCaseNumber`).
 - **seed**: توزيع يغطي كل المصادر — قضيتان برقم محكمة (`4568/ي-1447`, `10247/ب-1446`)، قضيتان عماليتان برقم قوى فقط، وقضيتان بالرقم الداخلي فقط (لم تُرفع بعد). حلقة backfill في نهاية `seed.ts` تضبط `displayNumber` لكل القضايا بشكل idempotent.
 
+### التسلسل الزمني للقضية — `CaseTimelineEvent` + `CaseTimelinePanel` (يقفل الركن الخامس من التفويض)
+- **النموذج** `CaseTimelineEvent` (`caseId`, `sequence`, `title`, `content?`, `eventDate?`, `source`, `createdById`) + `enum TimelineEventSource { template, manual }`. أضيف أيضًا **`Case.createdById`** (مُنشئ/مفعّل القضية — لم يكن موجودًا) يُضبط في POST `/api/cases` وتفعيل الاستلام.
+- **القالب المبدئي**: عند تفعيل القضية تُنشأ **4 أحداث `template`** في نفس المعاملة (sequence 1 «الدراسة الأولية (بعد اعتمادها)»، 2/3/4 «الإجراء الأول/الثاني/الثالث»، `content=null`, `eventDate=null`, `createdById=المفعّل`).
+- **`manage_timeline` (الركن الخامس من التفويض — كان معلّقًا)**: `hasBaseCasePermission` له الآن أساس = **مُنشئ القضية (`createdById`) + المحامي الرئيسي (`responsibleLawyerId`) + `system_admin`** (الباقون عرض فقط) — أو تفويض فعّال بـ `manage_timeline`، مع تفوّق DENY. الفحص مطبَّق في **الـ API** لا الواجهة فقط (`resolveCasePermission`). أُضيف `createdById?` إلى `CaseAccessInput`.
+- **API** (`/api/cases/[id]/timeline`): `GET` (كل من يرى القضية) · `POST` (إجراء يدوي، `sequence=آخر+1`, `source=manual`) · `PATCH /[eventId]` (title/content/eventDate) · `DELETE /[eventId]` (**الأحداث اليدوية فقط**؛ القالب لا يُحذف). الثلاثة الأخيرة تخضع لـ `manage_timeline`، وكلها في التدقيق (`viaDelegation`). إشعار `timeline_event_updated` للفريق عند **اكتمال** حدث (محتوى + تاريخ) لأول مرة.
+- **الواجهة** `CaseTimelinePanel` (قسم رئيسي في `CaseDetailView`، بعرض كامل): تسلسل عمودي RTL — رقم التسلسل + العنوان + التاريخ (أو «لم يُحدد») + مقتطف المحتوى؛ المكتمل أخضر، الفارغ باهت بوسم «بانتظار الإدخال»؛ أزرار ✎/حذف و«➕ إضافة إجراء» تظهر فقط لمن يملك `manage_timeline`.
+- **مُختبَر عبر HTTP**: 4 أحداث قالب عند التفعيل، إضافة/تعديل/حذف، أساس `manage_timeline` (منشئ/محامٍ رئيسي) + تفويض، منع حذف القالب، وتفوّق DENY.
+
 ### تفويض الصلاحيات التدرّجي على مستوى القضية — `PermissionDelegation` + `rbac.ts` + `CaseDelegationsPanel`
 - **الفكرة**: تفويض صلاحية محدّدة على قضية بعينها لعضو فريق أدنى في السلسلة، **مؤقتًا** (بمهلة انتهاء، افتراضي 30 يومًا) وقابلًا للإلغاء. الصلاحيات (`DelegatedPermission`): `edit_case` · `manage_team` · `assign_tasks` · `write_memo` · `manage_timeline`. النموذج `PermissionDelegation` (`caseId`, `grantedById`, `grantedToId`, `permission`, `expiresAt`, `revokedAt/ById`, `reason`).
 - **القاعدة الذهبية محفوظة**: منطق التفويض أُضيف **بشكل متطابق** إلى `canAccessCase` و`caseVisibilityWhere` — تفويض فعّال (غير ملغى + غير منتهٍ) يمنح **رؤية** القضية، مع بقاء **DENY الصريح متفوّقًا على أي تفويض**. تُحمَّل `delegations` في صفحة تفاصيل القضية حتى يتطابق `canAccessCase` مع الاستعلام.
@@ -117,7 +125,7 @@ src/
   - `PATCH /api/cases/[id]/team` → `manage_team` (بدل فحص الدور فقط — **صار يتطلب وصولًا مباشرًا للقضية أو تفويضًا؛ مسؤول النظام غير متأثر**).
   - `POST /api/tasks` (مرتبطة بقضية) → `assign_tasks` (أساسها الأدوار العاملة على القضايا: مسؤول/مشرف/محامٍ/باحث).
   - `POST /api/memos` → `write_memo` (أُزيل حاجز `canAuthorMemo` المبكر؛ فمحامٍ مُفوَّض `write_memo` يستطيع الكتابة الآن).
-  - `manage_timeline`: لا مسار له بعد (سيُوصَل مع تسلسل الأحداث).
+  - `manage_timeline`: مُوصَّل الآن عبر مسارات التسلسل الزمني (انظر «التسلسل الزمني للقضية»).
 - **مُختبَر عبر HTTP**: محامٍ مُفوَّض `edit_case` يعدّل القضية؛ وبعد الإلغاء يُرفض 403؛ ومع DENY صريح يُرفض 403 رغم التفويض؛ وبلا أساس ولا تفويض يُرفض 403.
 
 ### تشكيل فريق القضية الكامل — `src/lib/caseTeam.ts` + `CaseTeamPanel`/`TeamFormationFields`

@@ -26,6 +26,7 @@ type DelegationLite = {
 
 type CaseAccessInput = {
   responsibleLawyerId: string;
+  createdById?: string | null; // مُنشئ القضية (أساس manage_timeline) — يُحمَّل عند الحاجة فقط
   team: { userId: string }[];
   accessOverrides: { userId: string; accessType: "allow" | "deny" }[];
   // اختياري: عند تحميله، تُمنح الرؤية أيضًا لأصحاب التفويضات الفعّالة (يجب أن يُحمَّل
@@ -228,7 +229,12 @@ export function hasBaseCasePermission(
     case "write_memo":
       return user.role === "system_admin" || user.role === "researcher";
     case "manage_timeline":
-      return user.role === "system_admin" || user.role === "supervisor";
+      // مُنشئ القضية + المحامي الرئيسي + مسؤول النظام (الباقون: عرض فقط).
+      return (
+        user.role === "system_admin" ||
+        caseData.responsibleLawyerId === user.id ||
+        (caseData.createdById != null && caseData.createdById === user.id)
+      );
     default:
       return false;
   }

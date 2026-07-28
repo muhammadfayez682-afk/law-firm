@@ -19,6 +19,7 @@ import type {
 } from "@prisma/client";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { CaseTeamPanel } from "@/components/cases/CaseTeamPanel";
+import { CaseTimelinePanel, type TimelineEventView } from "@/components/cases/CaseTimelinePanel";
 import {
   CaseDelegationsPanel,
   type DelegationView,
@@ -159,6 +160,7 @@ export function CaseDetailView({
   taskUsers,
   teamUsers,
   delegationInfo,
+  timelineInfo,
   archiveInfo,
 }: {
   caseData: FullCase;
@@ -180,6 +182,10 @@ export function CaseDetailView({
     candidates: DelegationCandidate[];
     grants: DelegatedPermission[];
     canManage: boolean;
+  };
+  timelineInfo: {
+    canManage: boolean;
+    events: TimelineEventView[];
   };
   archiveInfo: ArchiveInfo;
 }) {
@@ -631,6 +637,12 @@ export function CaseDetailView({
           canEdit={canEdit}
         />
       )}
+
+      <CaseTimelinePanel
+        caseId={caseData.id}
+        events={timelineInfo.events}
+        canManage={timelineInfo.canManage}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">

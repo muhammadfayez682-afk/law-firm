@@ -242,6 +242,7 @@ export async function POST(request: NextRequest) {
           claimValue: body.claimValue ? Number(body.claimValue) : null,
           clientId,
           responsibleLawyerId: body.responsibleLawyerId,
+          createdById: session.user.id,
           priority: body.priority ?? "normal",
           conflictCheckConfirmed: true,
           clientPartyRole,

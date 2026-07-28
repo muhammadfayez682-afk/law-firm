@@ -30,6 +30,8 @@ model User {
   accessOverrides     CaseAccessOverride[]
   grantedDelegations  PermissionDelegation[] @relation("DelegationGranter")
   receivedDelegations PermissionDelegation[] @relation("DelegationRecipient")
+  createdCases        Case[]                 @relation("CaseCreator")
+  timelineEvents      CaseTimelineEvent[]    @relation("TimelineEventCreator")
   uploadedDocuments   Document[]
   recordedMinutes     SessionMinutes[]
   createdTemplates    Template[]
@@ -185,6 +187,8 @@ model Case {
   closedDate             DateTime?
   responsibleLawyer      User                    @relation("ResponsibleLawyer", fields: [responsibleLawyerId], references: [id])
   responsibleLawyerId    String
+  createdBy              User?                   @relation("CaseCreator", fields: [createdById], references: [id])
+  createdById            String? // مُنشئ/مفعّل القضية (أساس صلاحية manage_timeline)
   priority               CasePriority            @default(normal)
   conflictCheckConfirmed Boolean                 @default(false)
   clientPartyRole        PartyRole? // صفة موكّلنا في الدعوى (للاستعلام السريع)
@@ -204,6 +208,7 @@ model Case {
   team                   CaseTeamMember[]
   accessOverrides        CaseAccessOverride[]
   delegations            PermissionDelegation[]
+  timeline               CaseTimelineEvent[]
   documents              Document[]
   sessions               Session[]
   invoices               Invoice[]
@@ -315,6 +320,30 @@ model PermissionDelegation {
 
   @@index([caseId, grantedToId])
   @@map("permission_delegations")
+}
+
+// تسلسل زمني لأحداث القضية المهمة (قالب مبدئي عند التفعيل + إجراءات يدوية).
+enum TimelineEventSource {
+  template // حدث من القالب المبدئي (لا يُحذف)
+  manual // إجراء أضيف يدويًا
+}
+
+model CaseTimelineEvent {
+  id          String              @id @default(uuid())
+  case        Case                @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId      String
+  sequence    Int
+  title       String
+  content     String?             @db.Text
+  eventDate   DateTime?
+  source      TimelineEventSource @default(manual)
+  createdBy   User                @relation("TimelineEventCreator", fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([caseId, sequence])
+  @@map("case_timeline_events")
 }
 
 enum DocumentVisibility {
@@ -996,6 +1025,7 @@ enum NotificationType {
   task_assigned_multi // أُسندت إليك مهمة ضمن عدة مكلّفين
   task_assignee_completed // أنجز أحد المكلّفين نصيبه من المهمة
   task_recreated // أُعيد إنشاء مهمة مرفوضة كنسخة جديدة
+  timeline_event_updated // اكتمل محتوى حدث في التسلسل الزمني للقضية
 
   // الجلسات
   session_scheduled

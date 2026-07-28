@@ -8,6 +8,7 @@ import {
   isSystemAdmin,
   canDelegateTo,
   hasBaseCasePermission,
+  canPerformOnCase,
 } from "@/lib/rbac";
 import { getAmicableSettlementPlatform, getCaseFlowStages, getFirstStage } from "@/lib/caseFlow";
 import { canAuthorMemo, canReviewMemo } from "@/lib/memos";
@@ -63,6 +64,10 @@ export default async function CaseDetailPage({
           grantedBy: { select: { id: true, fullName: true, role: true } },
           grantedTo: { select: { id: true, fullName: true } },
         },
+      },
+      timeline: {
+        orderBy: { sequence: "asc" },
+        include: { createdBy: { select: { fullName: true } } },
       },
     },
   });
@@ -142,6 +147,20 @@ export default async function CaseDetailPage({
     canManage: session.user.role === "system_admin" || session.user.role === "supervisor",
   };
 
+  // ===== التسلسل الزمني =====
+  const timelineInfo = {
+    canManage: canPerformOnCase(session.user, caseData, "manage_timeline"),
+    events: caseData.timeline.map((e) => ({
+      id: e.id,
+      sequence: e.sequence,
+      title: e.title,
+      content: e.content,
+      eventDate: e.eventDate?.toISOString() ?? null,
+      source: e.source,
+      createdByName: e.createdBy.fullName,
+    })),
+  };
+
   const serializedCase = {
     ...caseData,
     claimValue: caseData.claimValue ? Number(caseData.claimValue) : null,
@@ -198,6 +217,7 @@ export default async function CaseDetailPage({
       taskUsers={taskUsers}
       teamUsers={teamUsers}
       delegationInfo={delegationInfo}
+      timelineInfo={timelineInfo}
       archiveInfo={archiveInfo}
     />
   );
