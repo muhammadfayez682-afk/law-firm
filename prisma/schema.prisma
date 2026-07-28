@@ -440,6 +440,9 @@ model Session {
   preparationChecklist   SessionPreparationTask[]
   minutes        SessionMinutes?
   filledTemplates FilledTemplate[]
+  // مذكرة الجلسة الإلزامية للجلسات المنعقدة (الإلزام منطقي في الـ API لا قيد schema).
+  memo           LegalMemo?       @relation("SessionMemo", fields: [memoId], references: [id])
+  memoId         String?
 
   @@map("sessions")
 }
@@ -698,6 +701,9 @@ model LegalMemo {
   parentMemoId String?
   parent       LegalMemo?  @relation("MemoVersions", fields: [parentMemoId], references: [id])
   supplements  LegalMemo[] @relation("MemoVersions")
+
+  // الجلسات المرتبطة بهذه المذكرة (Session.memoId → SessionMemo).
+  linkedSessions Session[] @relation("SessionMemo")
 
   @@map("legal_memos")
 }
@@ -1036,6 +1042,7 @@ enum NotificationType {
   session_prep_reminder // تحضير الجلسة قبل 3 أيام
   session_prep_urgent // تحضير الجلسة قبل 24 ساعة
   session_prep_critical // عنصر حرج غير جاهز (وكالة/مذكرة)
+  session_memo_required // جلسة منعقدة بلا مذكرة — مطلوب كتابة/ربط مذكرة
 
   // الوكالات
   agency_expiring_soon

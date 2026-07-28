@@ -84,6 +84,17 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  // ربط تلقائي بجلسة عند تمرير sessionId (مذكرة الجلسة) — للجلسة من نفس القضية إن لم تكن مرتبطة.
+  if (typeof body.sessionId === "string" && body.sessionId) {
+    const targetSession = await prisma.session.findUnique({
+      where: { id: body.sessionId },
+      select: { id: true, caseId: true, memoId: true },
+    });
+    if (targetSession && targetSession.caseId === body.caseId && !targetSession.memoId) {
+      await prisma.session.update({ where: { id: targetSession.id }, data: { memoId: created.id } });
+    }
+  }
+
   await prisma.auditLog.create({
     data: {
       userId: session.user.id,

@@ -25,11 +25,13 @@ export function MemoForm({
   cases,
   memo,
   fixedCaseId,
+  sessionId,
 }: {
   mode: "new" | "edit";
   cases?: { id: string; title: string; internalNumber: string }[];
   memo?: MemoInitial;
   fixedCaseId?: string;
+  sessionId?: string; // ربط المذكرة الجديدة بجلسة (مذكرة الجلسة)
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -57,6 +59,7 @@ export function MemoForm({
       legalBasis: form.legalBasis,
       precedents: form.precedents,
       circulars: form.circulars,
+      ...(mode === "new" && sessionId ? { sessionId } : {}),
     };
     const url = mode === "edit" && memo ? `/api/memos/${memo.id}` : "/api/memos";
     const method = mode === "edit" ? "PATCH" : "POST";

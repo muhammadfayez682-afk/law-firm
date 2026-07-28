@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { sendNotification } from "./send";
 import { getUserIdsByRoles } from "./recipients";
 import { DEFAULT_PREP_TASKS, isCriticalPrepTask } from "@/lib/sessionPrep";
+import { attendingLawyerIds } from "@/lib/sessionMemo";
 
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
@@ -16,6 +17,7 @@ export type SchedulerResults = {
   pendingAgencyAlerts: number;
   prepChecklistsCreated: number;
   sessionPrepAlerts: number;
+  sessionMemoAlerts: number;
 };
 
 /**
@@ -70,6 +72,7 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
     pendingAgencyAlerts: 0,
     prepChecklistsCreated: 0,
     sessionPrepAlerts: 0,
+    sessionMemoAlerts: 0,
   };
   const now = Date.now();
 
@@ -230,7 +233,33 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
   results.prepChecklistsCreated = await generateSessionPrepChecklists();
   results.sessionPrepAlerts = await checkSessionPrepReadiness();
 
+  // ===== 8. جلسات منعقدة بلا مذكرة — تذكير المحامين الحاضرين =====
+  results.sessionMemoAlerts = await checkHeldSessionsMissingMemo();
+
   return results;
+}
+
+/** جلسات منعقدة (held) بلا مذكرة مرتبطة → تذكير المحامين الحاضرين (يوميًا). */
+async function checkHeldSessionsMissingMemo(): Promise<number> {
+  const sessions = await prisma.session.findMany({
+    where: { status: "held", memoId: null },
+    include: { case: { include: { team: true } } },
+  });
+  let sent = 0;
+  for (const s of sessions) {
+    const recipients = attendingLawyerIds(s.case);
+    for (const uid of recipients) {
+      const ok = await notifyOnce(uid, "session_memo_required", s.id, 20 * 60 * 60 * 1000, {
+        priority: "high",
+        title: "مطلوب كتابة مذكرة الجلسة",
+        message: "جلسة منعقدة ما زالت بلا مذكرة — اكتب أو اربط مذكرة.",
+        actionUrl: `/cases/${s.caseId}`,
+        resourceType: "session",
+      });
+      if (ok) sent++;
+    }
+  }
+  return sent;
 }
 
 /**

@@ -95,6 +95,7 @@ export default async function SessionsPage({
     status: s.status,
     court: s.court,
     hasMinutes: s.minutes !== null,
+    memoId: s.memoId,
     caseId: s.caseId,
     caseTitle: s.case.title,
     caseInternalNumber: s.case.internalNumber,

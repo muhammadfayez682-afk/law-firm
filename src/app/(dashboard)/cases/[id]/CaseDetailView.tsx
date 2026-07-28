@@ -665,6 +665,13 @@ export function CaseDetailView({
                         {SESSION_TYPE_LABELS_AR[s.sessionType]}
                         {s.court ? ` · ${s.court}` : ""}
                       </p>
+                      {s.status === "held" && (
+                        s.memoId ? (
+                          <span className="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">📝 موثّقة</span>
+                        ) : (
+                          <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">⚠️ بانتظار المذكرة</span>
+                        )
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       {s.meetingLink && (() => {

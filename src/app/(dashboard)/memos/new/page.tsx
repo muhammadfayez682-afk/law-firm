@@ -9,7 +9,7 @@ import { MemoForm } from "../MemoForm";
 export default async function NewMemoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ caseId?: string }>;
+  searchParams: Promise<{ caseId?: string; sessionId?: string }>;
 }) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
@@ -22,7 +22,7 @@ export default async function NewMemoPage({
     );
   }
 
-  const { caseId } = await searchParams;
+  const { caseId, sessionId } = await searchParams;
 
   const cases = await prisma.case.findMany({
     where: caseVisibilityWhere(session.user),
@@ -45,7 +45,7 @@ export default async function NewMemoPage({
         </Link>
       </div>
 
-      <MemoForm mode="new" cases={cases} fixedCaseId={defaultCaseId} />
+      <MemoForm mode="new" cases={cases} fixedCaseId={defaultCaseId} sessionId={sessionId} />
     </div>
   );
 }
