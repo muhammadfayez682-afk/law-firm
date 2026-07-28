@@ -18,6 +18,7 @@ export interface TrackChangesOptions {
   reason: ChangeReason;
   reasonNote: string;
   ipAddress?: string | null;
+  viaDelegation?: boolean | null; // هل تم التعديل بصلاحية مُفوَّضة؟ (للتدقيق)
 }
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -61,6 +62,7 @@ export async function trackEntityChanges(opts: TrackChangesOptions, db: Db = pri
       resourceType: opts.entityType,
       resourceId: opts.entityId,
       ipAddress: opts.ipAddress ?? null,
+      viaDelegation: opts.viaDelegation ?? null,
     },
   });
 

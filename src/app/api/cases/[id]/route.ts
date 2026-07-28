@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { CaseType, ChangeReason, PartyRole, Prisma } from "@prisma/client";
-import { canAccessCase, canEditCase, isManagement } from "@/lib/rbac";
+import { canAccessCase, canEditCase, isManagement, resolveCasePermission } from "@/lib/rbac";
 import { canProceedToCourt } from "@/lib/caseFlow";
 import { syncCaseDisplayNumber } from "@/lib/caseNumber.server";
 import { notifyBulk } from "@/lib/notifications/send";
@@ -31,7 +31,21 @@ const CASE_EDITABLE_FIELDS = [
 async function loadCaseForAccessCheck(id: string) {
   return prisma.case.findUnique({
     where: { id },
-    include: { team: true, accessOverrides: true, amicableSettlement: true },
+    include: {
+      team: true,
+      accessOverrides: true,
+      amicableSettlement: true,
+      delegations: {
+        select: {
+          grantedToId: true,
+          grantedById: true,
+          permission: true,
+          revokedAt: true,
+          expiresAt: true,
+          grantedBy: { select: { role: true } },
+        },
+      },
+    },
   });
 }
 
@@ -83,7 +97,9 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "القضية غير موجودة" }, { status: 404 });
   }
 
-  if (!canEditCase(session.user, existing)) {
+  // فحص edit_case: صلاحية أساسية أو تفويض فعّال (DENY الصريح يتفوّق داخل الدالة).
+  const editPerm = resolveCasePermission(session.user, existing, "edit_case");
+  if (!editPerm.allowed) {
     return NextResponse.json({ error: "لا تملك صلاحية تعديل هذه القضية" }, { status: 403 });
   }
 
@@ -155,6 +171,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           reason,
           reasonNote,
           ipAddress: ip,
+          viaDelegation: editPerm.viaDelegation,
         },
         tx
       );
@@ -257,6 +274,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       action: "update",
       resourceType: "Case",
       resourceId: id,
+      viaDelegation: editPerm.viaDelegation,
     },
   });
 

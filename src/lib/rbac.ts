@@ -218,7 +218,13 @@ export function hasBaseCasePermission(
     case "manage_team":
       return user.role === "system_admin" || user.role === "supervisor";
     case "assign_tasks":
-      return user.role === "system_admin" || user.role === "supervisor" || user.role === "lawyer";
+      // كل الأدوار العاملة على القضايا تنشئ مهامًا (مع قيود المُسند إليه في canAssignTaskTo).
+      return (
+        user.role === "system_admin" ||
+        user.role === "supervisor" ||
+        user.role === "lawyer" ||
+        user.role === "researcher"
+      );
     case "write_memo":
       return user.role === "system_admin" || user.role === "researcher";
     case "manage_timeline":
@@ -260,3 +266,33 @@ export function canPerformOnCase(
 ): boolean {
   return hasBaseCasePermission(user, caseData, permission) || hasDelegatedPermission(user, caseData, permission);
 }
+
+/**
+ * مثل canPerformOnCase لكن يوضّح إن كان القبول عبر تفويض — لتسجيله في التدقيق.
+ * DENY الصريح يُرفض داخل الدالتين الأساسيتين (يتفوّق على التفويض).
+ */
+export function resolveCasePermission(
+  user: SessionUser,
+  caseData: CasePermissionInput,
+  permission: DelegatedPermission
+): { allowed: boolean; viaDelegation: boolean } {
+  if (hasBaseCasePermission(user, caseData, permission)) return { allowed: true, viaDelegation: false };
+  const delegated = hasDelegatedPermission(user, caseData, permission);
+  return { allowed: delegated, viaDelegation: delegated };
+}
+
+/** تضمين Prisma الموحّد لتحميل القضية بما يلزم فحص الصلاحيات الفعّالة (canPerformOnCase). */
+export const casePermissionInclude = {
+  team: { select: { userId: true } },
+  accessOverrides: { select: { userId: true, accessType: true } },
+  delegations: {
+    select: {
+      grantedToId: true,
+      grantedById: true,
+      permission: true,
+      revokedAt: true,
+      expiresAt: true,
+      grantedBy: { select: { role: true } },
+    },
+  },
+} as const;

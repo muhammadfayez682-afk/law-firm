@@ -536,6 +536,7 @@ model AuditLog {
   resourceType String
   resourceId   String
   ipAddress    String?
+  viaDelegation Boolean?   // هل نُفّذ الفعل بصلاحية مُفوَّضة (لا أساسية)؟ للتتبّع.
   createdAt    DateTime    @default(now())
 
   @@index([resourceType, resourceId])

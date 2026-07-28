@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import type { Prisma, TaskCategory, TaskPriority, TaskStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessCase } from "@/lib/rbac";
+import { canAccessCase, resolveCasePermission } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
 import { canAssignTaskTo, taskVisibilityWhere } from "@/lib/tasks";
 import { canAccessService } from "@/lib/services";
@@ -135,12 +135,32 @@ export async function POST(request: NextRequest) {
   }
 
   // تحقّق صلاحية الوصول للكيان المرتبط.
+  let caseTaskViaDelegation = false;
   if (caseId) {
-    const caseData = await prisma.case.findUnique({ where: { id: caseId }, include: { team: true, accessOverrides: true } });
+    const caseData = await prisma.case.findUnique({
+      where: { id: caseId },
+      include: {
+        team: true,
+        accessOverrides: true,
+        delegations: {
+          select: {
+            grantedToId: true,
+            grantedById: true,
+            permission: true,
+            revokedAt: true,
+            expiresAt: true,
+            grantedBy: { select: { role: true } },
+          },
+        },
+      },
+    });
     if (!caseData) return NextResponse.json({ error: "القضية غير موجودة" }, { status: 404 });
-    if (!canAccessCase(session.user, caseData)) {
-      return NextResponse.json({ error: "لا تملك صلاحية الوصول لهذه القضية" }, { status: 403 });
+    // إنشاء/إسناد مهمة مرتبطة بقضية يتطلب صلاحية assign_tasks (أساسية أو تفويض فعّال).
+    const assignPerm = resolveCasePermission(session.user, caseData, "assign_tasks");
+    if (!assignPerm.allowed) {
+      return NextResponse.json({ error: "لا تملك صلاحية إنشاء مهمة لهذه القضية" }, { status: 403 });
     }
+    caseTaskViaDelegation = assignPerm.viaDelegation;
   }
   if (serviceId) {
     const svc = await prisma.legalService.findUnique({ where: { id: serviceId }, select: { id: true, assignedToId: true, createdById: true } });
@@ -184,7 +204,13 @@ export async function POST(request: NextRequest) {
   });
 
   await prisma.auditLog.create({
-    data: { userId: session.user.id, action: "create", resourceType: "Task", resourceId: created.id },
+    data: {
+      userId: session.user.id,
+      action: "create",
+      resourceType: "Task",
+      resourceId: created.id,
+      viaDelegation: caseTaskViaDelegation,
+    },
   });
 
   // إشعار كل مُسند (عدا المُنشئ).

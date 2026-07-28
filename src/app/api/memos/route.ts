@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessCase } from "@/lib/rbac";
+import { canAccessCase, resolveCasePermission } from "@/lib/rbac";
 import { canAuthorMemo, memoVisibilityWhere } from "@/lib/memos";
 
 export async function GET(request: NextRequest) {
@@ -35,10 +35,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
   }
 
-  if (!canAuthorMemo(session.user.role)) {
-    return NextResponse.json({ error: "كتابة المذكرات متاحة للباحث القانوني فقط" }, { status: 403 });
-  }
-
   const body = await request.json();
   const title = typeof body.title === "string" ? body.title.trim() : "";
   const memoType = typeof body.memoType === "string" ? body.memoType.trim() : "";
@@ -48,16 +44,30 @@ export async function POST(request: NextRequest) {
   if (!title) return NextResponse.json({ error: "عنوان المذكرة مطلوب" }, { status: 400 });
   if (!memoType) return NextResponse.json({ error: "نوع المذكرة مطلوب" }, { status: 400 });
 
-  // يجب أن يكون الباحث عضوًا في فريق القضية.
+  // كتابة المذكرة تتطلب صلاحية write_memo (أساسية: باحث/مسؤول بوصول، أو تفويض فعّال).
   const caseData = await prisma.case.findUnique({
     where: { id: body.caseId },
-    include: { team: true, accessOverrides: true },
+    include: {
+      team: true,
+      accessOverrides: true,
+      delegations: {
+        select: {
+          grantedToId: true,
+          grantedById: true,
+          permission: true,
+          revokedAt: true,
+          expiresAt: true,
+          grantedBy: { select: { role: true } },
+        },
+      },
+    },
   });
   if (!caseData) {
     return NextResponse.json({ error: "القضية غير موجودة" }, { status: 404 });
   }
-  if (!canAccessCase(session.user, caseData)) {
-    return NextResponse.json({ error: "لا تملك صلاحية إضافة مذكرة لهذه القضية" }, { status: 403 });
+  const memoPerm = resolveCasePermission(session.user, caseData, "write_memo");
+  if (!memoPerm.allowed) {
+    return NextResponse.json({ error: "لا تملك صلاحية كتابة مذكرة لهذه القضية" }, { status: 403 });
   }
 
   const created = await prisma.legalMemo.create({
@@ -80,6 +90,7 @@ export async function POST(request: NextRequest) {
       action: "create",
       resourceType: "LegalMemo",
       resourceId: created.id,
+      viaDelegation: memoPerm.viaDelegation,
     },
   });
 

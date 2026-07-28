@@ -4,24 +4,40 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildTeamMembers, TeamValidationError, TEAM_ROLE_LABELS_AR, type TeamInput } from "@/lib/caseTeam";
 import { notify } from "@/lib/notifications/send";
+import { resolveCasePermission } from "@/lib/rbac";
 
 type Params = { params: Promise<{ id: string }> };
 
-/** تعديل تشكيل فريق القضية — مسؤول النظام والمشرف فقط. */
+/** تعديل تشكيل فريق القضية — صلاحية manage_team أساسية (مسؤول/مشرف بوصول) أو تفويض فعّال. */
 export async function PATCH(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
-  if (session.user.role !== "system_admin" && session.user.role !== "supervisor") {
-    return NextResponse.json({ error: "تعديل الفريق متاح لمسؤول النظام أو المشرف" }, { status: 403 });
-  }
 
   const { id } = await params;
   const caseData = await prisma.case.findUnique({
     where: { id },
-    include: { team: true },
+    include: {
+      team: true,
+      accessOverrides: { select: { userId: true, accessType: true } },
+      delegations: {
+        select: {
+          grantedToId: true,
+          grantedById: true,
+          permission: true,
+          revokedAt: true,
+          expiresAt: true,
+          grantedBy: { select: { role: true } },
+        },
+      },
+    },
   });
   if (!caseData) return NextResponse.json({ error: "القضية غير موجودة" }, { status: 404 });
   if (caseData.deletedAt) return NextResponse.json({ error: "القضية محذوفة" }, { status: 400 });
+
+  const teamPerm = resolveCasePermission(session.user, caseData, "manage_team");
+  if (!teamPerm.allowed) {
+    return NextResponse.json({ error: "لا تملك صلاحية تعديل فريق هذه القضية" }, { status: 403 });
+  }
 
   const body = await request.json();
   const teamInput: TeamInput = {
@@ -54,7 +70,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   });
 
   await prisma.auditLog.create({
-    data: { userId: session.user.id, action: "update", resourceType: "Case", resourceId: id },
+    data: {
+      userId: session.user.id,
+      action: "update",
+      resourceType: "Case",
+      resourceId: id,
+      viaDelegation: teamPerm.viaDelegation,
+    },
   });
 
   const roleOf = new Map(members.map((m) => [m.userId, m.roleInCase]));

@@ -112,6 +112,13 @@ src/
 - **سلسلة التفويض** (`DELEGATION_CHAIN_RANK` + `canDelegateTo`): `system_admin`(3) → `supervisor`(2) → `lawyer`/`researcher`(1). يُفوَّض للأدنى رتبةً فقط (لا أفقي ولا صاعد). أساس الصلاحيات: admin=كل شيء؛ supervisor=`manage_team`/`manage_timeline`/`edit_case`/`assign_tasks`؛ lawyer=`edit_case`/`assign_tasks`؛ researcher=`write_memo`.
 - **API**: `GET /api/cases/[id]/delegations` (قائمة مع إشارة `isEffective`) · `POST` (`{grantedToId, permission, expiresAt?, reason}` — يتحقق: يملكها + السلسلة + لا DENY + سبب إلزامي؛ إشعار `delegation_granted`) · `PATCH /[delegationId]` (إلغاء — المُفوِّض أو مسؤول/مشرف؛ إشعار `delegation_revoked`). كلها تُسجَّل في `audit_log`. نوعا إشعار جديدان.
 - **الواجهة** (`CaseDelegationsPanel`): قسم «🔑 تفويض الصلاحيات» في صفحة القضية — جدول التفويضات الفعّالة (المفوَّض له/الصلاحية/تنتهي/إلغاء) + مودال منح (عضو الفريق + الصلاحية المملوكة + تاريخ اختياري + سبب إلزامي). يظهر زر المنح فقط لمن يملك صلاحية قابلة للتفويض ولديه مرشّحون.
+- **التوصيل في مسارات الأفعال** (`resolveCasePermission` + `casePermissionInclude`): كل مسار يحمّل القضية بتضمين التفويضات ثم يفحص الصلاحية المحدّدة (أساسية OR تفويض فعّال)، ويسجّل في التدقيق `viaDelegation` (حقل جديد في `AuditLog`) للتتبّع:
+  - `PATCH /api/cases/[id]` → `edit_case` (بدل `canEditCase`).
+  - `PATCH /api/cases/[id]/team` → `manage_team` (بدل فحص الدور فقط — **صار يتطلب وصولًا مباشرًا للقضية أو تفويضًا؛ مسؤول النظام غير متأثر**).
+  - `POST /api/tasks` (مرتبطة بقضية) → `assign_tasks` (أساسها الأدوار العاملة على القضايا: مسؤول/مشرف/محامٍ/باحث).
+  - `POST /api/memos` → `write_memo` (أُزيل حاجز `canAuthorMemo` المبكر؛ فمحامٍ مُفوَّض `write_memo` يستطيع الكتابة الآن).
+  - `manage_timeline`: لا مسار له بعد (سيُوصَل مع تسلسل الأحداث).
+- **مُختبَر عبر HTTP**: محامٍ مُفوَّض `edit_case` يعدّل القضية؛ وبعد الإلغاء يُرفض 403؛ ومع DENY صريح يُرفض 403 رغم التفويض؛ وبلا أساس ولا تفويض يُرفض 403.
 
 ### تشكيل فريق القضية الكامل — `src/lib/caseTeam.ts` + `CaseTeamPanel`/`TeamFormationFields`
 - **القرار**: عند تفعيل القضية يُشكَّل **فريق كامل** بدل «محامٍ مسؤول» واحد. الأدوار في `CaseTeamRole` (وُسِّع من `supervisor/lawyer/researcher` إلى): **`lead_supervisor`** (مشرف رئيسي — اختياري، واحد)، `co_supervisor` (مشرف مساعد — احتياطي، لا تُنشئه الواجهة حاليًا)، **`lead_lawyer`** (محامٍ رئيسي — **إلزامي، واحد**)، **`co_lawyer`** (محامٍ مساعد — عدد مفتوح)، **`researcher`** (باحث — عدد مفتوح). Migration `20260721090000_expand_case_team_role` يعيّن القديم: `supervisor→lead_supervisor`، `lawyer→lead_lawyer`، `researcher→researcher`.
