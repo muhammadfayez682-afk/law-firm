@@ -1,4 +1,4 @@
-import type { Prisma, UserRole, DocumentVisibility } from "@prisma/client";
+import type { Prisma, UserRole, DocumentVisibility, DelegatedPermission } from "@prisma/client";
 
 export const ROLE_LABELS_AR: Record<UserRole, string> = {
   system_admin: "مسؤول النظام",
@@ -17,10 +17,20 @@ export type SessionUser = {
   role: UserRole;
 };
 
+/** تفويض فعّال يكفي لمنح رؤية القضية (النوع المصغّر المطلوب في canAccessCase). */
+type DelegationLite = {
+  grantedToId: string;
+  revokedAt: Date | null;
+  expiresAt: Date;
+};
+
 type CaseAccessInput = {
   responsibleLawyerId: string;
   team: { userId: string }[];
   accessOverrides: { userId: string; accessType: "allow" | "deny" }[];
+  // اختياري: عند تحميله، تُمنح الرؤية أيضًا لأصحاب التفويضات الفعّالة (يجب أن يُحمَّل
+  // في صفحة تفاصيل القضية لإبقاء canAccessCase متزامنًا مع caseVisibilityWhere).
+  delegations?: DelegationLite[];
 };
 
 // مسؤول النظام فقط يملك رؤية شاملة لكل القضايا؛ بقية الأدوار عبر عضوية الفريق أو تفويض.
@@ -35,17 +45,38 @@ export function isSystemAdmin(role: UserRole): boolean {
   return role === "system_admin";
 }
 
-/** مسؤول النظام يرى كل القضايا؛ غيره يحتاج أن يكون محاميًا مسؤولًا، أو عضو فريق، أو صاحب تفويض allow، مع احترام DENY صريح. */
-export function canAccessCase(user: SessionUser, caseData: CaseAccessInput): boolean {
+function isDenied(userId: string, overrides: { userId: string; accessType: "allow" | "deny" }[]): boolean {
+  return overrides.some((o) => o.userId === userId && o.accessType === "deny");
+}
+
+/** رؤية القضية بحكم الوضع المباشر (تجاوز/إدارة/محامٍ مسؤول/عضوية فريق) — دون النظر إلى التفويضات. */
+function hasDirectCaseAccess(user: SessionUser, caseData: CaseAccessInput): boolean {
   const override = caseData.accessOverrides.find((o) => o.userId === user.id);
   if (override?.accessType === "deny") return false;
   if (override?.accessType === "allow") return true;
-
   if (isManagement(user.role)) return true;
   if (caseData.responsibleLawyerId === user.id) return true;
-  if (caseData.team.some((member) => member.userId === user.id)) return true;
+  return caseData.team.some((member) => member.userId === user.id);
+}
 
-  return false;
+/** هل للمستخدم تفويض فعّال (غير ملغى وغير منتهٍ) على القضية؟ (رؤية فقط — بلا نظر لنوع الصلاحية). */
+function hasActiveDelegation(userId: string, delegations?: DelegationLite[]): boolean {
+  if (!delegations) return false;
+  const now = Date.now();
+  return delegations.some(
+    (d) => d.grantedToId === userId && d.revokedAt == null && new Date(d.expiresAt).getTime() > now
+  );
+}
+
+/**
+ * مسؤول النظام يرى كل القضايا؛ غيره يحتاج أن يكون محاميًا مسؤولًا، أو عضو فريق، أو صاحب تفويض allow،
+ * أو صاحب **تفويض صلاحية فعّال** على القضية — مع احترام DENY صريح (يتفوّق على التفويض دائمًا).
+ * ⚠️ منطق التفويض هنا يجب أن يطابق فرع التفويض في caseVisibilityWhere (القاعدة الذهبية).
+ */
+export function canAccessCase(user: SessionUser, caseData: CaseAccessInput): boolean {
+  if (isDenied(user.id, caseData.accessOverrides)) return false; // DENY يتفوّق حتى على التفويض
+  if (hasDirectCaseAccess(user, caseData)) return true;
+  return hasActiveDelegation(user.id, caseData.delegations);
 }
 
 /** شرط Prisma لتقييد رؤية القضايا يطابق منطق canAccessCase — يُستخدم عند الاستعلام مباشرة من قاعدة البيانات. */
@@ -53,6 +84,7 @@ export function caseVisibilityWhere(user: SessionUser): Prisma.CaseWhereInput {
   // القضايا المحذوفة (حذف ناعم) تُستبعد من كل الاستعلامات المرئية.
   if (isManagement(user.role)) return { deletedAt: null };
 
+  const now = new Date();
   return {
     deletedAt: null,
     AND: [
@@ -62,6 +94,8 @@ export function caseVisibilityWhere(user: SessionUser): Prisma.CaseWhereInput {
           { responsibleLawyerId: user.id },
           { team: { some: { userId: user.id } } },
           { accessOverrides: { some: { userId: user.id, accessType: "allow" } } },
+          // تفويض صلاحية فعّال يمنح رؤية القضية — يطابق hasActiveDelegation في canAccessCase.
+          { delegations: { some: { grantedToId: user.id, revokedAt: null, expiresAt: { gt: now } } } },
         ],
       },
     ],
@@ -127,4 +161,102 @@ export function canViewDocument(
 
 export function canUploadDocuments(role: UserRole): boolean {
   return role !== "accountant";
+}
+
+// ============================================================================
+// تفويض الصلاحيات على مستوى القضية
+// ============================================================================
+
+/**
+ * ترتيب سلسلة التفويض: system_admin → supervisor → lawyer/researcher.
+ * لا يُفوَّض إلا لمن هو أدنى في السلسلة (منع التفويض الأفقي أو الصاعد).
+ */
+export const DELEGATION_CHAIN_RANK: Record<UserRole, number> = {
+  system_admin: 3,
+  supervisor: 2,
+  lawyer: 1,
+  researcher: 1,
+  secretary: 0,
+  accountant: 0,
+};
+
+/** هل يجوز لصاحب دور granterRole أن يفوّض لصاحب دور recipientRole (أدنى منه في السلسلة)؟ */
+export function canDelegateTo(granterRole: UserRole, recipientRole: UserRole): boolean {
+  return DELEGATION_CHAIN_RANK[granterRole] > DELEGATION_CHAIN_RANK[recipientRole];
+}
+
+/** نوع مصغّر لتفويض عند فحص الصلاحية (يشمل دور المُفوِّض لفحص أهليته الديناميكي). */
+type DelegationForCheck = {
+  grantedToId: string;
+  grantedById: string;
+  grantedBy: { role: UserRole };
+  permission: DelegatedPermission;
+  revokedAt: Date | null;
+  expiresAt: Date;
+};
+
+type CasePermissionInput = {
+  responsibleLawyerId: string;
+  team: { userId: string }[];
+  accessOverrides: { userId: string; accessType: "allow" | "deny" }[];
+  delegations: DelegationForCheck[];
+};
+
+/**
+ * هل يملك المستخدم الصلاحية **بحكم وضعه المباشر** (دوره + عضويته المباشرة في القضية)، دون تفويض؟
+ * هذه هي القاعدة التي تمنع تصعيد الامتيازات: لا أحد يفوّض ما لا يملكه أصلًا هنا.
+ */
+export function hasBaseCasePermission(
+  user: SessionUser,
+  caseData: CaseAccessInput,
+  permission: DelegatedPermission
+): boolean {
+  if (!hasDirectCaseAccess(user, caseData)) return false;
+  switch (permission) {
+    case "edit_case":
+      return user.role !== "accountant";
+    case "manage_team":
+      return user.role === "system_admin" || user.role === "supervisor";
+    case "assign_tasks":
+      return user.role === "system_admin" || user.role === "supervisor" || user.role === "lawyer";
+    case "write_memo":
+      return user.role === "system_admin" || user.role === "researcher";
+    case "manage_timeline":
+      return user.role === "system_admin" || user.role === "supervisor";
+    default:
+      return false;
+  }
+}
+
+/**
+ * هل يملك المستخدم الصلاحية عبر تفويض فعّال؟ التفويض صالح فقط إذا:
+ *  - لا يوجد DENY صريح على المستخدم (يتفوّق دائمًا).
+ *  - غير ملغى (revokedAt == null) وغير منتهٍ (expiresAt > now).
+ *  - **المُفوِّض ما زال يملك الصلاحية فعليًا** (بحكم وضعه المباشر) وقت الفحص — تحقق ديناميكي،
+ *    فإن فقد المُفوِّض دوره/عضويته سقط التفويض تلقائيًا (ويمنع إعادة تفويض صلاحية مُفوَّضة).
+ */
+export function hasDelegatedPermission(
+  user: SessionUser,
+  caseData: CasePermissionInput,
+  permission: DelegatedPermission
+): boolean {
+  if (isDenied(user.id, caseData.accessOverrides)) return false; // DENY يتفوّق على التفويض
+  const now = Date.now();
+  return caseData.delegations.some(
+    (d) =>
+      d.grantedToId === user.id &&
+      d.permission === permission &&
+      d.revokedAt == null &&
+      new Date(d.expiresAt).getTime() > now &&
+      hasBaseCasePermission({ id: d.grantedById, role: d.grantedBy.role }, caseData, permission)
+  );
+}
+
+/** الصلاحية الفعّالة = مباشرة أو مُفوَّضة صالحة. */
+export function canPerformOnCase(
+  user: SessionUser,
+  caseData: CasePermissionInput,
+  permission: DelegatedPermission
+): boolean {
+  return hasBaseCasePermission(user, caseData, permission) || hasDelegatedPermission(user, caseData, permission);
 }

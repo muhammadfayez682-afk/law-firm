@@ -19,6 +19,12 @@ import type {
 } from "@prisma/client";
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { CaseTeamPanel } from "@/components/cases/CaseTeamPanel";
+import {
+  CaseDelegationsPanel,
+  type DelegationView,
+  type DelegationCandidate,
+} from "@/components/cases/CaseDelegationsPanel";
+import type { DelegatedPermission } from "@prisma/client";
 import { SettlementPanel } from "@/components/cases/SettlementPanel";
 import { CasePipeline } from "@/components/cases/CasePipeline";
 import { ClosureRequestBanner } from "@/components/cases/ClosureRequestBanner";
@@ -152,6 +158,7 @@ export function CaseDetailView({
   tasks,
   taskUsers,
   teamUsers,
+  delegationInfo,
   archiveInfo,
 }: {
   caseData: FullCase;
@@ -168,6 +175,12 @@ export function CaseDetailView({
   tasks: CaseTask[];
   taskUsers: { id: string; fullName: string; role: UserRole }[];
   teamUsers: { id: string; fullName: string; role: string }[];
+  delegationInfo: {
+    delegations: DelegationView[];
+    candidates: DelegationCandidate[];
+    grants: DelegatedPermission[];
+    canManage: boolean;
+  };
   archiveInfo: ArchiveInfo;
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -769,6 +782,16 @@ export function CaseDetailView({
             }))}
             teamUsers={teamUsers}
             canEdit={userRole === "system_admin" || userRole === "supervisor"}
+          />
+
+          <CaseDelegationsPanel
+            caseId={caseData.id}
+            caseTitle={caseData.title}
+            delegations={delegationInfo.delegations}
+            candidates={delegationInfo.candidates}
+            grants={delegationInfo.grants}
+            currentUserId={currentUserId}
+            canManage={delegationInfo.canManage}
           />
 
           <CasePipeline stages={flowStages} status={caseData.status} />

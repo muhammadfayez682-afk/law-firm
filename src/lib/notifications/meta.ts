@@ -60,6 +60,8 @@ export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
   case_restored: { label: "استرجاع قضية", description: "أُعيدت قضية من الأرشيف", icon: "♻️", category: "case", defaultPriority: "normal" },
   case_deleted: { label: "حذف نهائي لقضية", description: "حُذفت قضية نهائيًا", icon: "🗑️", category: "case", defaultPriority: "urgent" },
   case_team_updated: { label: "تحديث فريق القضية", description: "تغيّر تشكيل فريق القضية", icon: "👥", category: "case", defaultPriority: "normal" },
+  delegation_granted: { label: "تفويض صلاحية", description: "مُنحت تفويض صلاحية على قضية", icon: "🔑", category: "case", defaultPriority: "high" },
+  delegation_revoked: { label: "إلغاء تفويض", description: "أُلغي تفويض صلاحية على قضية", icon: "🔒", category: "case", defaultPriority: "normal" },
 
   // الجلسات
   session_scheduled: { label: "جدولة جلسة", description: "جُدولت جلسة جديدة", icon: "📅", category: "session", defaultPriority: "normal" },

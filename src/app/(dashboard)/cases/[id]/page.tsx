@@ -2,11 +2,18 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessCase, canEditCase, isSystemAdmin } from "@/lib/rbac";
+import {
+  canAccessCase,
+  canEditCase,
+  isSystemAdmin,
+  canDelegateTo,
+  hasBaseCasePermission,
+} from "@/lib/rbac";
 import { getAmicableSettlementPlatform, getCaseFlowStages, getFirstStage } from "@/lib/caseFlow";
 import { canAuthorMemo, canReviewMemo } from "@/lib/memos";
 import { displayTaskStatus, getAssignableUsers } from "@/lib/tasks";
 import { canArchiveCase, canRestoreCase, checkDeleteEligibility } from "@/lib/caseArchive";
+import { ALL_DELEGATED_PERMISSIONS, DELEGATED_PERMISSION_LABELS_AR } from "@/lib/caseDelegation";
 import { CaseDetailView } from "./CaseDetailView";
 
 export default async function CaseDetailPage({
@@ -49,6 +56,14 @@ export default async function CaseDetailPage({
         include: { assignedTo: { select: { fullName: true } } },
       },
       invoices: { select: { status: true } },
+      // التفويضات: تُحمَّل حتى يرى canAccessCase أصحاب التفويض الفعّال (القاعدة الذهبية).
+      delegations: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          grantedBy: { select: { id: true, fullName: true, role: true } },
+          grantedTo: { select: { id: true, fullName: true } },
+        },
+      },
     },
   });
 
@@ -89,6 +104,43 @@ export default async function CaseDetailPage({
     }),
   ]);
   const settlementPlatform = getAmicableSettlementPlatform(caseData.caseType);
+
+  // ===== تفويض الصلاحيات =====
+  // الصلاحيات التي يملكها المستخدم بحكم وضعه المباشر (يمكنه تفويضها).
+  const delegationGrants = ALL_DELEGATED_PERMISSIONS.filter((p) =>
+    hasBaseCasePermission(session.user, caseData, p)
+  );
+  // المرشّحون للتفويض إليهم: أعضاء فريق القضية الأدنى في السلسلة (وليسوا المستخدم نفسه).
+  const delegationCandidates = caseData.team
+    .filter((m) => m.userId !== session.user.id && canDelegateTo(session.user.role, m.user.role))
+    .map((m) => ({ id: m.userId, fullName: m.user.fullName, role: m.user.role }));
+  const nowMs = Date.now();
+  const delegationViews = caseData.delegations
+    .filter((d) => d.revokedAt == null) // نعرض غير الملغاة فقط
+    .map((d) => {
+      const notExpired = new Date(d.expiresAt).getTime() > nowMs;
+      const granterHolds = hasBaseCasePermission(
+        { id: d.grantedById, role: d.grantedBy.role },
+        caseData,
+        d.permission
+      );
+      return {
+        id: d.id,
+        permissionLabel: DELEGATED_PERMISSION_LABELS_AR[d.permission],
+        grantedToName: d.grantedTo.fullName,
+        grantedById: d.grantedById,
+        grantedByName: d.grantedBy.fullName,
+        expiresAt: d.expiresAt.toISOString(),
+        isEffective: notExpired && granterHolds,
+        granterLostPermission: notExpired && !granterHolds,
+      };
+    });
+  const delegationInfo = {
+    delegations: delegationViews,
+    candidates: delegationCandidates,
+    grants: delegationGrants,
+    canManage: session.user.role === "system_admin" || session.user.role === "supervisor",
+  };
 
   const serializedCase = {
     ...caseData,
@@ -145,6 +197,7 @@ export default async function CaseDetailPage({
       tasks={tasks}
       taskUsers={taskUsers}
       teamUsers={teamUsers}
+      delegationInfo={delegationInfo}
       archiveInfo={archiveInfo}
     />
   );

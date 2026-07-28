@@ -28,6 +28,8 @@ model User {
   responsibleCases    Case[]               @relation("ResponsibleLawyer")
   caseTeamMemberships CaseTeamMember[]
   accessOverrides     CaseAccessOverride[]
+  grantedDelegations  PermissionDelegation[] @relation("DelegationGranter")
+  receivedDelegations PermissionDelegation[] @relation("DelegationRecipient")
   uploadedDocuments   Document[]
   recordedMinutes     SessionMinutes[]
   createdTemplates    Template[]
@@ -201,6 +203,7 @@ model Case {
   parties                CaseParty[]
   team                   CaseTeamMember[]
   accessOverrides        CaseAccessOverride[]
+  delegations            PermissionDelegation[]
   documents              Document[]
   sessions               Session[]
   invoices               Invoice[]
@@ -284,6 +287,34 @@ model CaseAccessOverride {
 
   @@unique([caseId, userId])
   @@map("case_access_overrides")
+}
+
+// تفويض صلاحيات تدرّجي على مستوى القضية (مؤقت، بمهلة انتهاء، قابل للإلغاء).
+enum DelegatedPermission {
+  edit_case // تعديل بيانات القضية
+  manage_team // إدارة فريق القضية
+  assign_tasks // إسناد المهام
+  write_memo // كتابة المذكرات
+  manage_timeline // إدارة مسار/جدول القضية
+}
+
+model PermissionDelegation {
+  id          String              @id @default(uuid())
+  case        Case                @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId      String
+  grantedBy   User                @relation("DelegationGranter", fields: [grantedById], references: [id])
+  grantedById String
+  grantedTo   User                @relation("DelegationRecipient", fields: [grantedToId], references: [id])
+  grantedToId String
+  permission  DelegatedPermission
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  revokedById String?
+  reason      String              @db.Text
+  createdAt   DateTime            @default(now())
+
+  @@index([caseId, grantedToId])
+  @@map("permission_delegations")
 }
 
 enum DocumentVisibility {
@@ -946,6 +977,8 @@ enum NotificationType {
   case_restored // أُعيدت من الأرشيف
   case_deleted // حُذفت نهائيًا (تحذير لمسؤولي النظام)
   case_team_updated // تغيّر تشكيل فريق القضية (إضافة/إزالة عضو)
+  delegation_granted // مُنح تفويض صلاحية على قضية
+  delegation_revoked // أُلغي تفويض صلاحية على قضية
 
   // الجلسات
   session_scheduled
