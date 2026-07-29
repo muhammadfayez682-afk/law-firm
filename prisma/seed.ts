@@ -2,6 +2,7 @@ import { PrismaClient, NotificationType } from "@prisma/client";
 import type { CaseType, NotificationChannel, PartyRole, Prisma } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
+import { normalizeArabic } from "../src/lib/arabic";
 
 // كل أنواع الإشعارات مشتقّة من enum المولّد (تبقى متزامنة مع schema.prisma).
 const ALL_NOTIFICATION_TYPES = Object.values(NotificationType);
@@ -52,6 +53,7 @@ async function main() {
     create: {
       type: "individual",
       fullName: "عبدالله بن سعيد الحربي",
+      searchName: normalizeArabic("عبدالله بن سعيد الحربي"),
       nationalIdOrCr: "1023456789",
       nationality: "سعودي",
       phone: "0561112233",
@@ -66,6 +68,7 @@ async function main() {
     create: {
       type: "company",
       fullName: "شركة الأفق للمقاولات",
+      searchName: normalizeArabic("شركة الأفق للمقاولات"),
       nationalIdOrCr: "7001112223",
       representativeName: "ماجد بن فهد العتيبي",
       phone: "0114455667",
@@ -80,6 +83,7 @@ async function main() {
     create: {
       type: "company",
       fullName: "مؤسسة النخبة للتجارة العامة",
+      searchName: normalizeArabic("مؤسسة النخبة للتجارة العامة"),
       nationalIdOrCr: "7004445556",
       representativeName: "نورة بنت خالد السبيعي",
       phone: "0126677889",

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizeSaudiPhone } from "@/lib/validators";
+import { normalizeArabic } from "@/lib/arabic";
 
 const CLOSED_STATUSES = ["closed", "archived"] as const;
 
@@ -18,11 +19,12 @@ export async function GET(request: NextRequest) {
   if (!q || q.length < 3) return NextResponse.json({ clients: [] });
 
   const normalizedPhone = normalizeSaudiPhone(q);
+  const nq = normalizeArabic(q); // بحث الاسم على العمود المطبّع (يتسامح مع صيغ الألف/الياء/التاء)
 
   const clients = await prisma.client.findMany({
     where: {
       OR: [
-        { fullName: { contains: q, mode: "insensitive" } },
+        { searchName: { contains: nq } },
         { phone: { contains: normalizedPhone } },
         { nationalIdOrCr: { contains: q } },
       ],

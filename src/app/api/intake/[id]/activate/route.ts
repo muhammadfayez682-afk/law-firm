@@ -15,6 +15,7 @@ import {
   type TeamMemberSpec,
 } from "@/lib/caseTeam";
 import { notify } from "@/lib/notifications/send";
+import { normalizeArabic } from "@/lib/arabic";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -68,6 +69,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             data: {
               type: clientType,
               fullName: intake.clientName,
+              searchName: normalizeArabic(intake.clientName),
               nationalIdOrCr: intake.clientIdNumber || null,
               phone: intake.clientPhone,
               email: intake.clientEmail || null,
@@ -168,6 +170,7 @@ export async function POST(request: NextRequest, { params }: Params) {
           data: {
             type: clientType,
             fullName: intake.clientName,
+            searchName: normalizeArabic(intake.clientName),
             nationalIdOrCr: intake.clientIdNumber || null,
             phone: intake.clientPhone,
             email: intake.clientEmail || null,

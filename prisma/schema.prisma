@@ -92,6 +92,8 @@ model Client {
   phone              String?
   email              String?
   status             ClientStatus @default(prospect)
+  // اسم مطبّع للبحث العربي المتسامح (normalizeArabic(fullName)) — يُزامَن عند كل كتابة.
+  searchName         String?
   createdAt          DateTime     @default(now())
   cases              Case[]
   agencies           Agency[]
@@ -104,6 +106,7 @@ model Client {
   // يسمح بتسجيل مكرر بعد تأكيد المستخدم (زر «متابعة الحفظ»). التفرّد على
   // nationalIdOrCr مضمون أصلًا عبر @unique أعلاه.
   @@index([phone])
+  @@index([searchName])
   @@map("clients")
 }
 

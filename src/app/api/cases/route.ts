@@ -22,6 +22,7 @@ import {
 } from "@/lib/duplicateCheck";
 import type { CaseType, PartyRole } from "@prisma/client";
 import { notify } from "@/lib/notifications/send";
+import { normalizeArabic } from "@/lib/arabic";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -170,6 +171,7 @@ export async function POST(request: NextRequest) {
           data: {
             type: newClient.type,
             fullName: newClient.fullName,
+            searchName: normalizeArabic(newClient.fullName),
             nationalIdOrCr: newClient.nationalIdOrCr || null,
             nationality: newClient.nationality || null,
             representativeName: newClient.representativeName || null,

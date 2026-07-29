@@ -12,6 +12,7 @@ import {
   VALIDATION_MESSAGES,
 } from "@/lib/validators";
 import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
+import { normalizeArabic } from "@/lib/arabic";
 
 const CLOSED_STATUSES: CaseStatus[] = ["closed", "archived"];
 
@@ -125,6 +126,7 @@ export async function POST(request: NextRequest) {
     data: {
       type: body.type,
       fullName: body.fullName,
+      searchName: normalizeArabic(String(body.fullName ?? "")),
       nationalIdOrCr,
       nationality: body.nationality || null,
       representativeName: body.representativeName || null,

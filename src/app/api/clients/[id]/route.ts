@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessClient } from "@/lib/rbac";
+import { normalizeArabic } from "@/lib/arabic";
 import {
   isValidNationalIdOrCr,
   isValidSaudiPhone,
@@ -129,6 +130,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "لا توجد تغييرات" }, { status: 400 });
     }
 
+    // مزامنة الاسم المطبّع عند تغيّر fullName.
+    if ("fullName" in data) {
+      (data as Record<string, unknown>).searchName = data.fullName
+        ? normalizeArabic(String(data.fullName))
+        : null;
+    }
+
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
     const result = await prisma.$transaction(async (tx) => {
       const u = await tx.client.update({ where: { id }, data });
@@ -167,6 +175,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     where: { id },
     data: {
       fullName: body.fullName ?? undefined,
+      searchName: body.fullName !== undefined ? normalizeArabic(String(body.fullName)) : undefined,
       nationalIdOrCr: body.nationalIdOrCr ?? undefined,
       nationality: body.nationality ?? undefined,
       representativeName: body.representativeName ?? undefined,
