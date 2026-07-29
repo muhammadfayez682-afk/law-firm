@@ -47,6 +47,7 @@ model User {
   receivedIntakes     IntakeRequest[]      @relation("IntakeReceiver")
   assessedIntakes     IntakeRequest[]      @relation("IntakeAssessor")
   decidedIntakes      IntakeRequest[]      @relation("IntakeDecider")
+  approvedAssessments IntakeRequest[]      @relation("IntakeAssessmentApprover")
   delegatedAssessments IntakeRequest[]     @relation("IntakeAssessorDelegate")
   delegatedByMe       IntakeRequest[]      @relation("IntakeDelegator")
   intakeDocuments     IntakeDocument[]
@@ -821,6 +822,10 @@ model IntakeRequest {
   estimatedDuration String? // المدة التقريبية
   proposedFee       Decimal?  @db.Decimal(12, 2) // الأتعاب المقترحة
   assessedAt        DateTime?
+  // اعتماد التقييم (بوّابة إلزامية للتفعيل) — مسؤول النظام فقط.
+  assessmentApprovedBy   User?     @relation("IntakeAssessmentApprover", fields: [assessmentApprovedById], references: [id])
+  assessmentApprovedById String?
+  assessmentApprovedAt   DateTime?
 
   // قرار القبول/الرفض
   decision        String? // "accepted" | "rejected"
@@ -1008,6 +1013,8 @@ enum NotificationType {
   intake_pending_assessment
   intake_assessment_delegated // للمُفوَّض
   intake_pending_decision
+  intake_assessment_ready // تقييم اكتمل وينتظر اعتماد المسؤول
+  intake_assessment_approved // اعتُمد تقييمك (للمقيّم)
   intake_accepted
   intake_rejected
 

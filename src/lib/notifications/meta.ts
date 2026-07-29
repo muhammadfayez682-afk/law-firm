@@ -39,6 +39,8 @@ export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
   intake_pending_assessment: { label: "طلب بانتظار التقييم", description: "طلب استلام ينتظر دراسة التقييم", icon: "🔎", category: "intake", defaultPriority: "normal" },
   intake_assessment_delegated: { label: "تفويض تقييم", description: "فُوِّض إليك تقييم طلب استلام", icon: "📨", category: "intake", defaultPriority: "high" },
   intake_pending_decision: { label: "طلب بانتظار القرار", description: "طلب استلام اكتمل تقييمه وينتظر القرار", icon: "⚖️", category: "intake", defaultPriority: "normal" },
+  intake_assessment_ready: { label: "تقييم بانتظار الاعتماد", description: "اكتمل تقييم طلب وينتظر اعتماد المسؤول", icon: "📋", category: "intake", defaultPriority: "normal" },
+  intake_assessment_approved: { label: "اعتماد تقييم", description: "اعتُمد تقييمك لطلب الاستلام", icon: "✅", category: "intake", defaultPriority: "normal" },
   intake_accepted: { label: "قبول طلب استلام", description: "قُبل طلب الاستلام", icon: "✅", category: "intake", defaultPriority: "normal" },
   intake_rejected: { label: "رفض طلب استلام", description: "رُفض طلب الاستلام", icon: "❌", category: "intake", defaultPriority: "normal" },
 

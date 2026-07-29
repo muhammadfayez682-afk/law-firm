@@ -56,6 +56,8 @@ type IntakeData = {
   proposedFee: number | null;
   assessedAt: string | null;
   assessmentByName: string | null;
+  assessmentApprovedAt: string | null;
+  assessmentApprovedByName: string | null;
   assessmentDelegatedToId: string | null;
   assessmentDelegatedToName: string | null;
   assessmentDelegatedByName: string | null;
@@ -105,6 +107,7 @@ export function IntakeDetailView({
   canAssess,
   canDecide,
   canActivate,
+  canApprove,
   canDelegate,
   currentUserId,
   delegateUsers,
@@ -117,6 +120,7 @@ export function IntakeDetailView({
   canAssess: boolean;
   canDecide: boolean;
   canActivate: boolean;
+  canApprove: boolean;
   canDelegate: boolean;
   currentUserId: string;
   delegateUsers: { id: string; fullName: string; role: UserRole }[];
@@ -132,6 +136,18 @@ export function IntakeDetailView({
   const activeStage = intakeStageIndex(intake.status);
   const isDecided = intake.status === "accepted" || intake.status === "rejected";
   const isDelegated = Boolean(intake.assessmentDelegatedToId);
+  // الحقول الإلزامية الأربعة الناقصة (يُعامل "0"/الفراغ كغير معبّأ) — للتحقق قبل زر الاعتماد.
+  const isFilled = (v: string | null) => !!v && v.trim() !== "" && v.trim() !== "0";
+  const mandatoryMissing = (
+    [
+      ["التكييف القانوني", intake.legalBasis],
+      ["الاختصاص القضائي", intake.jurisdiction],
+      ["نقاط القوة", intake.strengths],
+      ["نقاط الضعف", intake.weaknesses],
+    ] as const
+  )
+    .filter(([, v]) => !isFilled(v))
+    .map(([l]) => l);
 
   async function post(url: string, body?: unknown, okMsg?: string) {
     setBusy(true);
@@ -309,8 +325,8 @@ export function IntakeDetailView({
         </section>
       )}
 
-      {/* قسم 3: دراسة التقييم — الإدارة/المشرف أو المُفوَّض إليه */}
-      {canAssess && !isDecided && (
+      {/* قسم 3: دراسة التقييم — متاح لأي مستخدم يملك رؤية الطلب (تعبئة، لا اعتماد) */}
+      {canAssess && !isDecided && !intake.assessmentApprovedAt && (
         <AssessmentForm
           intake={intake}
           busy={busy}
@@ -318,7 +334,7 @@ export function IntakeDetailView({
           onSave={(body) => post(`/api/intake/${intake.id}/assessment`, body, "تم حفظ التقييم")}
         />
       )}
-      {(!canAssess || isDecided) && intake.assessedAt && (
+      {(!canAssess || isDecided || intake.assessmentApprovedAt) && intake.assessedAt && (
         <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
           <h2 className="mb-3 font-semibold text-navy">دراسة التقييم</h2>
           <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
@@ -332,22 +348,50 @@ export function IntakeDetailView({
         </section>
       )}
 
-      {/* أزرار القرار — بعد حفظ التقييم، للإدارة/المشرف فقط */}
-      {canDecide && !isDecided && intake.status !== "fee_agreement_pending" && intake.assessedAt && (
-        <div className="flex flex-wrap justify-end gap-3">
+      {/* اعتماد التقييم — بوّابة إلزامية للتفعيل (مسؤول النظام) */}
+      {intake.assessedAt && intake.status !== "rejected" && intake.status !== "cancelled" && !intake.caseId && (
+        <section className="rounded-xl border border-black/5 bg-white p-4 shadow-sm">
+          {intake.assessmentApprovedAt ? (
+            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-emerald-700">
+              ✅ التقييم معتمد{intake.assessmentApprovedByName ? ` من ${intake.assessmentApprovedByName}` : ""}
+              <span className="text-xs font-normal text-foreground/50">{formatDualDateTime(intake.assessmentApprovedAt)}</span>
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-amber-800">⏳ التقييم بانتظار اعتماد المسؤول</p>
+                {mandatoryMissing.length > 0 && (
+                  <p className="mt-1 text-xs text-amber-700">حقول إلزامية ناقصة: {mandatoryMissing.join("، ")}</p>
+                )}
+              </div>
+              {canApprove && (
+                <button
+                  type="button"
+                  disabled={busy || mandatoryMissing.length > 0}
+                  title={mandatoryMissing.length > 0 ? "أكمل الحقول الإلزامية الأربعة أولًا" : undefined}
+                  onClick={() => post(`/api/intake/${intake.id}/approve-assessment`, {}, "تم اعتماد التقييم")}
+                  className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  اعتماد التقييم
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* رفض الطلب — للإدارة/المشرف (القبول صار عبر اعتماد التقييم) */}
+      {canDecide && !isDecided && !intake.assessmentApprovedAt && intake.assessedAt && (
+        <div className="flex justify-end">
           <button type="button" disabled={busy} onClick={() => setShowReject(true)}
             className="rounded-lg bg-red-600 px-5 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60">
             رفض الطلب
           </button>
-          <button type="button" disabled={busy} onClick={() => post(`/api/intake/${intake.id}/decision`, { decision: "accepted" }, "تم قبول الطلب — بانتظار عقد الأتعاب")}
-            className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
-            قبول القضية
-          </button>
         </div>
       )}
 
-      {/* قسم 4: عقد الأتعاب + التفعيل */}
-      {intake.status === "fee_agreement_pending" && canActivate && (
+      {/* قسم 4: عقد الأتعاب + التفعيل — بعد اعتماد التقييم فقط */}
+      {intake.assessmentApprovedAt && !intake.caseId && canActivate && (
         <section className="rounded-xl border-2 border-gold/40 bg-gold/5 p-5 shadow-sm">
           <h2 className="mb-3 font-semibold text-navy">عقد الأتعاب وتفعيل القضية</h2>
           <p className="mb-3 text-sm text-foreground/70">
@@ -617,21 +661,22 @@ function AssessmentForm({
         }}
         className="space-y-4"
       >
+        <p className="text-xs text-foreground/50">الحقول المعلّمة بـ <span className="text-red-600">*</span> إلزامية لاعتماد التقييم.</p>
         <div>
-          <label className={labelClass}>التكييف القانوني</label>
+          <label className={labelClass}>التكييف القانوني <span className="text-red-600">*</span></label>
           <textarea name="legalBasis" defaultValue={intake.legalBasis ?? ""} rows={2} className={inputClass} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>نقاط القوة</label>
+            <label className={labelClass}>نقاط القوة <span className="text-red-600">*</span></label>
             <textarea name="strengths" defaultValue={intake.strengths ?? ""} rows={2} className={inputClass} />
           </div>
           <div>
-            <label className={labelClass}>نقاط الضعف</label>
+            <label className={labelClass}>نقاط الضعف <span className="text-red-600">*</span></label>
             <textarea name="weaknesses" defaultValue={intake.weaknesses ?? ""} rows={2} className={inputClass} />
           </div>
           <div>
-            <label className={labelClass}>الاختصاص القضائي</label>
+            <label className={labelClass}>الاختصاص القضائي <span className="text-red-600">*</span></label>
             <input name="jurisdiction" defaultValue={intake.jurisdiction ?? ""} className={inputClass} />
           </div>
           <div>

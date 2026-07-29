@@ -39,9 +39,10 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (intake.caseId) {
     return NextResponse.json({ error: "تم تفعيل القضية لهذا الطلب مسبقًا" }, { status: 400 });
   }
-  if (intake.status !== "fee_agreement_pending") {
+  // ⚠️ بوّابة إلزامية: لا تفعيل قبل اعتماد التقييم من المسؤول.
+  if (!intake.assessmentApprovedAt) {
     return NextResponse.json(
-      { error: "لا يمكن تفعيل القضية إلا بعد قبول الطلب وتوقيع عقد الأتعاب" },
+      { error: "لا يمكن تفعيل الطلب قبل اعتماد التقييم من المسؤول" },
       { status: 400 }
     );
   }

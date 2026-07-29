@@ -114,6 +114,37 @@ export function canDecideIntake(role: UserRole): boolean {
 }
 export const canActivateIntake = canDecideIntake;
 
+/** اعتماد دراسة التقييم (بوّابة إلزامية للتفعيل): مسؤول النظام فقط. */
+export function canApproveAssessment(role: UserRole): boolean {
+  return role === "system_admin";
+}
+
+/** الحقول الإلزامية الأربعة في دراسة التقييم (بأسمائها العربية). */
+export const ASSESSMENT_MANDATORY_FIELDS = [
+  { key: "legalBasis", label: "التكييف القانوني" },
+  { key: "jurisdiction", label: "الاختصاص القضائي" },
+  { key: "strengths", label: "نقاط القوة" },
+  { key: "weaknesses", label: "نقاط الضعف" },
+] as const;
+
+/** حقل نصّي «معبّأ فعليًا»: ليس فارغًا وليس "0" (قيمة نائبة تعني الفراغ). */
+export function isMeaningfullyFilled(v: unknown): boolean {
+  if (typeof v !== "string") return v != null && v !== "";
+  const t = v.trim();
+  return t !== "" && t !== "0";
+}
+
+/** أسماء الحقول الإلزامية الناقصة (غير المعبّأة فعليًا) في تقييم الطلب. */
+export function assessmentMissingFields(intake: {
+  legalBasis?: string | null;
+  jurisdiction?: string | null;
+  strengths?: string | null;
+  weaknesses?: string | null;
+}): string[] {
+  const rec = intake as Record<string, unknown>;
+  return ASSESSMENT_MANDATORY_FIELDS.filter((f) => !isMeaningfullyFilled(rec[f.key])).map((f) => f.label);
+}
+
 /** تفويض التقييم لموظف آخر: مسؤول النظام والمشرف. */
 export function canDelegateAssessment(role: UserRole): boolean {
   return role === "system_admin" || role === "supervisor";

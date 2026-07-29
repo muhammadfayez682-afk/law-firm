@@ -6,7 +6,7 @@ import { CASE_HANDLER_ROLES } from "@/lib/rbac";
 import {
   canAccessIntake,
   canActivateIntake,
-  canAssessIntake,
+  canApproveAssessment,
   canDecideIntake,
   canDelegateAssessment,
 } from "@/lib/intake";
@@ -28,6 +28,7 @@ export default async function IntakeDetailPage({
     include: {
       receivedBy: { select: { fullName: true } },
       assessmentBy: { select: { fullName: true } },
+      assessmentApprovedBy: { select: { fullName: true } },
       assessmentDelegatedTo: { select: { fullName: true } },
       assessmentDelegatedBy: { select: { fullName: true } },
       decisionBy: { select: { fullName: true } },
@@ -105,6 +106,8 @@ export default async function IntakeDetailPage({
     proposedFee: intake.proposedFee ? Number(intake.proposedFee) : null,
     assessedAt: intake.assessedAt?.toISOString() ?? null,
     assessmentByName: intake.assessmentBy?.fullName ?? null,
+    assessmentApprovedAt: intake.assessmentApprovedAt?.toISOString() ?? null,
+    assessmentApprovedByName: intake.assessmentApprovedBy?.fullName ?? null,
     assessmentDelegatedToId: intake.assessmentDelegatedToId,
     assessmentDelegatedToName: intake.assessmentDelegatedTo?.fullName ?? null,
     assessmentDelegatedByName: intake.assessmentDelegatedBy?.fullName ?? null,
@@ -153,9 +156,10 @@ export default async function IntakeDetailPage({
       intake={serialized}
       lawyers={lawyers}
       teamUsers={teamUsers}
-      canAssess={canAssessIntake(session.user, intake)}
+      canAssess={canAccessIntake(session.user, intake)}
       canDecide={canDecideIntake(session.user.role)}
       canActivate={canActivateIntake(session.user.role)}
+      canApprove={canApproveAssessment(session.user.role)}
       canDelegate={canDelegate}
       currentUserId={session.user.id}
       delegateUsers={delegateUsers}
