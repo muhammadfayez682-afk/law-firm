@@ -54,6 +54,9 @@ type IntakeData = {
   jurisdiction: string | null;
   estimatedDuration: string | null;
   proposedFee: number | null;
+  evidence: string | null;
+  finalDirection: string | null;
+  approverNotes: string | null;
   assessedAt: string | null;
   assessmentByName: string | null;
   assessmentApprovedAt: string | null;
@@ -133,6 +136,7 @@ export function IntakeDetailView({
   const [showActivate, setShowActivate] = useState(false);
   const [showDelegate, setShowDelegate] = useState(false);
   const [showNewTask, setShowNewTask] = useState(false);
+  const [approverNotes, setApproverNotes] = useState("");
   const activeStage = intakeStageIndex(intake.status);
   const isDecided = intake.status === "accepted" || intake.status === "rejected";
   const isDelegated = Boolean(intake.assessmentDelegatedToId);
@@ -144,6 +148,7 @@ export function IntakeDetailView({
       ["الاختصاص القضائي", intake.jurisdiction],
       ["نقاط القوة", intake.strengths],
       ["نقاط الضعف", intake.weaknesses],
+      ["التوجّه النهائي", intake.finalDirection],
     ] as const
   )
     .filter(([, v]) => !isFilled(v))
@@ -338,12 +343,16 @@ export function IntakeDetailView({
         <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
           <h2 className="mb-3 font-semibold text-navy">دراسة التقييم</h2>
           <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+            <Field label="الوقائع" value={intake.disputeSummary ?? "—"} />
+            <Field label="البينات والأسانيد" value={intake.evidence ?? "—"} />
             <Field label="التكييف القانوني" value={intake.legalBasis ?? "—"} />
             <Field label="الاختصاص القضائي" value={intake.jurisdiction ?? "—"} />
             <Field label="نقاط القوة" value={intake.strengths ?? "—"} />
             <Field label="نقاط الضعف" value={intake.weaknesses ?? "—"} />
             <Field label="المدة التقريبية" value={intake.estimatedDuration ?? "—"} />
             <Field label="الأتعاب المقترحة" value={intake.proposedFee !== null ? formatCurrency(intake.proposedFee) : "—"} />
+            <Field label="التوجّه النهائي" value={intake.finalDirection ?? "—"} />
+            {intake.approverNotes && <Field label="ملاحظات المسؤول" value={intake.approverNotes} />}
           </dl>
         </section>
       )}
@@ -352,12 +361,22 @@ export function IntakeDetailView({
       {intake.assessedAt && intake.status !== "rejected" && intake.status !== "cancelled" && !intake.caseId && (
         <section className="rounded-xl border border-black/5 bg-white p-4 shadow-sm">
           {intake.assessmentApprovedAt ? (
-            <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-emerald-700">
-              ✅ التقييم معتمد{intake.assessmentApprovedByName ? ` من ${intake.assessmentApprovedByName}` : ""}
-              <span className="text-xs font-normal text-foreground/50">{formatDualDateTime(intake.assessmentApprovedAt)}</span>
-            </p>
-          ) : (
             <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-emerald-700">
+                ✅ التقييم معتمد{intake.assessmentApprovedByName ? ` من ${intake.assessmentApprovedByName}` : ""}
+                <span className="text-xs font-normal text-foreground/50">{formatDualDateTime(intake.assessmentApprovedAt)}</span>
+              </p>
+              <a
+                href={`/api/intake/${intake.id}/assessment-pdf`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg border border-navy/20 px-4 py-1.5 text-sm font-medium text-navy hover:bg-navy/5"
+              >
+                📄 تصدير PDF
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-3">
               <div>
                 <p className="text-sm font-medium text-amber-800">⏳ التقييم بانتظار اعتماد المسؤول</p>
                 {mandatoryMissing.length > 0 && (
@@ -365,15 +384,29 @@ export function IntakeDetailView({
                 )}
               </div>
               {canApprove && (
-                <button
-                  type="button"
-                  disabled={busy || mandatoryMissing.length > 0}
-                  title={mandatoryMissing.length > 0 ? "أكمل الحقول الإلزامية الأربعة أولًا" : undefined}
-                  onClick={() => post(`/api/intake/${intake.id}/approve-assessment`, {}, "تم اعتماد التقييم")}
-                  className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  اعتماد التقييم
-                </button>
+                <>
+                  <div>
+                    <label className={labelClass}>ملاحظات واقتراحات المسؤول (اختياري)</label>
+                    <textarea
+                      value={approverNotes}
+                      onChange={(e) => setApproverNotes(e.target.value)}
+                      rows={2}
+                      className={inputClass}
+                      placeholder="ملاحظات تُحفظ مع الاعتماد وتظهر في التقرير..."
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={busy || mandatoryMissing.length > 0}
+                      title={mandatoryMissing.length > 0 ? "أكمل الحقول الإلزامية الخمسة أولًا" : undefined}
+                      onClick={() => post(`/api/intake/${intake.id}/approve-assessment`, { approverNotes: approverNotes.trim() || null }, "تم اعتماد التقييم")}
+                      className="rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      اعتماد التقييم
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -657,14 +690,44 @@ function AssessmentForm({
             legalBasis: fd.get("legalBasis"), strengths: fd.get("strengths"),
             weaknesses: fd.get("weaknesses"), jurisdiction: fd.get("jurisdiction"),
             estimatedDuration: fd.get("estimatedDuration"), proposedFee: fd.get("proposedFee"),
+            evidence: fd.get("evidence"), finalDirection: fd.get("finalDirection"),
           });
         }}
         className="space-y-4"
       >
         <p className="text-xs text-foreground/50">الحقول المعلّمة بـ <span className="text-red-600">*</span> إلزامية لاعتماد التقييم.</p>
+
+        {/* الوقائع (من ملخص النزاع المسجّل عند الاستلام) */}
+        <div>
+          <label className={labelClass}>الوقائع</label>
+          <div className="rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-sm whitespace-pre-wrap text-foreground/80">
+            {intake.disputeSummary || "—"}
+          </div>
+        </div>
+
+        {/* البينات والأسانيد + المستندات المرفقة على الطلب */}
+        <div>
+          <label className={labelClass}>البينات والأسانيد</label>
+          <textarea name="evidence" defaultValue={intake.evidence ?? ""} rows={2} className={inputClass} placeholder="وصف موجز للأدلة والمستندات المؤيّدة..." />
+          <div className="mt-2 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-xs">
+            <span className="font-medium text-navy">المستندات المرفقة: </span>
+            {intake.documents.length > 0 ? (
+              <ul className="mt-1 list-inside list-disc text-foreground/70">
+                {intake.documents.map((d) => <li key={d.id}>{d.title}</li>)}
+              </ul>
+            ) : (
+              <span className="text-foreground/50">لا مستندات — أرفِقها من قسم «المستندات» أدناه.</span>
+            )}
+          </div>
+        </div>
+
         <div>
           <label className={labelClass}>التكييف القانوني <span className="text-red-600">*</span></label>
           <textarea name="legalBasis" defaultValue={intake.legalBasis ?? ""} rows={2} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>الاختصاص القضائي <span className="text-red-600">*</span></label>
+          <input name="jurisdiction" defaultValue={intake.jurisdiction ?? ""} className={inputClass} />
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
@@ -676,10 +739,6 @@ function AssessmentForm({
             <textarea name="weaknesses" defaultValue={intake.weaknesses ?? ""} rows={2} className={inputClass} />
           </div>
           <div>
-            <label className={labelClass}>الاختصاص القضائي <span className="text-red-600">*</span></label>
-            <input name="jurisdiction" defaultValue={intake.jurisdiction ?? ""} className={inputClass} />
-          </div>
-          <div>
             <label className={labelClass}>المدة التقريبية</label>
             <input name="estimatedDuration" defaultValue={intake.estimatedDuration ?? ""} className={inputClass} />
           </div>
@@ -687,6 +746,10 @@ function AssessmentForm({
             <label className={labelClass}>الأتعاب المقترحة (ر.س)</label>
             <input name="proposedFee" type="number" step="0.01" min="0" defaultValue={intake.proposedFee ?? ""} className={inputClass} dir="ltr" />
           </div>
+        </div>
+        <div>
+          <label className={labelClass}>التوجّه النهائي <span className="text-red-600">*</span></label>
+          <textarea name="finalDirection" defaultValue={intake.finalDirection ?? ""} rows={2} className={inputClass} placeholder="الخلاصة والتوصية النهائية لمسار القضية..." />
         </div>
         <div className="flex justify-end">
           <button type="submit" disabled={busy} className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60">

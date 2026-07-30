@@ -11,7 +11,7 @@ type Params = { params: Promise<{ id: string }> };
  * اعتماد دراسة التقييم — مسؤول النظام فقط.
  * بوّابة إلزامية للتفعيل: لا يُقبل الاعتماد قبل تعبئة الحقول الأربعة الإلزامية.
  */
-export async function POST(_request: NextRequest, { params }: Params) {
+export async function POST(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
 
@@ -39,11 +39,15 @@ export async function POST(_request: NextRequest, { params }: Params) {
     );
   }
 
+  const body = await request.json().catch(() => ({}));
+  const approverNotes = typeof body.approverNotes === "string" ? body.approverNotes.trim() || null : null;
+
   const updated = await prisma.intakeRequest.update({
     where: { id },
     data: {
       assessmentApprovedById: session.user.id,
       assessmentApprovedAt: new Date(),
+      approverNotes,
       // الاعتماد يجعل الطلب قابلًا للتفعيل (بانتظار عقد الأتعاب/التفعيل).
       status: "fee_agreement_pending",
     },

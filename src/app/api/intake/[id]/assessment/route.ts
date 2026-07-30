@@ -35,6 +35,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       body.proposedFee !== undefined && body.proposedFee !== null && body.proposedFee !== ""
         ? Number(body.proposedFee)
         : null,
+    evidence: body.evidence?.trim() || null,
+    finalDirection: body.finalDirection?.trim() || null,
   };
 
   const updated = await prisma.intakeRequest.update({

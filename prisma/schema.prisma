@@ -821,11 +821,14 @@ model IntakeRequest {
   jurisdiction      String? // الاختصاص القضائي
   estimatedDuration String? // المدة التقريبية
   proposedFee       Decimal?  @db.Decimal(12, 2) // الأتعاب المقترحة
+  evidence          String?   @db.Text // البينات والأسانيد (وصف؛ المستندات عبر IntakeDocument)
+  finalDirection    String?   @db.Text // التوجّه النهائي (إلزامي للاعتماد)
   assessedAt        DateTime?
   // اعتماد التقييم (بوّابة إلزامية للتفعيل) — مسؤول النظام فقط.
   assessmentApprovedBy   User?     @relation("IntakeAssessmentApprover", fields: [assessmentApprovedById], references: [id])
   assessmentApprovedById String?
   assessmentApprovedAt   DateTime?
+  approverNotes          String?   @db.Text // ملاحظات واقتراحات المسؤول (تُكتب وقت الاعتماد)
 
   // قرار القبول/الرفض
   decision        String? // "accepted" | "rejected"

@@ -119,12 +119,13 @@ export function canApproveAssessment(role: UserRole): boolean {
   return role === "system_admin";
 }
 
-/** الحقول الإلزامية الأربعة في دراسة التقييم (بأسمائها العربية). */
+/** الحقول الإلزامية في دراسة التقييم (بأسمائها العربية). */
 export const ASSESSMENT_MANDATORY_FIELDS = [
   { key: "legalBasis", label: "التكييف القانوني" },
   { key: "jurisdiction", label: "الاختصاص القضائي" },
   { key: "strengths", label: "نقاط القوة" },
   { key: "weaknesses", label: "نقاط الضعف" },
+  { key: "finalDirection", label: "التوجّه النهائي" },
 ] as const;
 
 /** حقل نصّي «معبّأ فعليًا»: ليس فارغًا وليس "0" (قيمة نائبة تعني الفراغ). */
@@ -140,6 +141,7 @@ export function assessmentMissingFields(intake: {
   jurisdiction?: string | null;
   strengths?: string | null;
   weaknesses?: string | null;
+  finalDirection?: string | null;
 }): string[] {
   const rec = intake as Record<string, unknown>;
   return ASSESSMENT_MANDATORY_FIELDS.filter((f) => !isMeaningfullyFilled(rec[f.key])).map((f) => f.label);
