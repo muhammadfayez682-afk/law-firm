@@ -8,7 +8,7 @@ const PAGE_TITLES: { prefix: string; label: string }[] = [
   { prefix: "/dashboard", label: "لوحة التحكم" },
   { prefix: "/cases", label: "القضايا" },
   { prefix: "/clients", label: "العملاء" },
-  { prefix: "/calendar", label: "التقويم والجلسات" },
+  { prefix: "/calendar", label: "التقويم العدلي" },
   { prefix: "/templates", label: "النماذج" },
   { prefix: "/reports", label: "التقارير والأداء" },
 ];
