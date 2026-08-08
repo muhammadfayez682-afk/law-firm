@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import {
   getAccountantDashboard,
   getAdminDashboard,
   getLawyerDashboard,
   getResearcherDashboard,
   getSecretaryDashboard,
+  getMyTasks,
+  getMySessions,
 } from "@/lib/dashboard-role";
 import type { SessionUser } from "@/lib/rbac";
 import { formatDualDate, formatTime, getDayNameAr } from "@/lib/dateUtils";
@@ -15,42 +18,90 @@ import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { SERVICE_STATUS_LABELS_AR, SERVICE_STATUS_STYLES } from "@/lib/services";
 import { TASK_PRIORITY_STYLES, TASK_PRIORITY_LABELS_AR } from "@/lib/tasks";
 import { JudicialCalendarWidget } from "@/components/dashboard/JudicialCalendarWidget";
+import { MyTasksWidget } from "@/components/dashboard/MyTasksWidget";
+import { MySessionsWidget } from "@/components/dashboard/MySessionsWidget";
+import { DashboardCustomizer } from "@/components/dashboard/DashboardCustomizer";
+import {
+  DASHBOARD_WIDGETS,
+  DEFAULT_VISIBLE_WIDGETS,
+  sanitizeWidgets,
+  type DashboardWidgetId,
+} from "@/lib/dashboardWidgets";
+
+/** الودجتات الظاهرة للمستخدم — المحفوظة أو الافتراضية. */
+async function loadVisibleWidgets(userId: string): Promise<DashboardWidgetId[]> {
+  const pref = await prisma.userDashboardPreference.findUnique({ where: { userId } });
+  return pref ? sanitizeWidgets(pref.visibleWidgets) : DEFAULT_VISIBLE_WIDGETS;
+}
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
-  const role = session.user.role;
+  const user = session.user;
+  const role = user.role;
+
+  const visible = new Set(await loadVisibleWidgets(user.id));
+
+  // نجلب بيانات الودجتات الظاهرة فقط (توفيرًا للاستعلامات).
+  const [myTasks, mySessions] = await Promise.all([
+    visible.has("my_tasks") ? getMyTasks(user) : Promise.resolve([]),
+    visible.has("my_sessions") ? getMySessions(user) : Promise.resolve([]),
+  ]);
+
+  // خريطة عرض كل ودجت — تُعرض بالترتيب الثابت في السجلّ.
+  const widgetNodes: Record<DashboardWidgetId, React.ReactNode> = {
+    my_tasks: <MyTasksWidget tasks={myTasks} />,
+    my_sessions: <MySessionsWidget sessions={mySessions} />,
+    role_overview: <RoleOverview user={user} />,
+    judicial_calendar: <JudicialCalendarWidget user={user} />,
+  };
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="font-amiri text-2xl font-bold text-navy">لوحة التحكم</h1>
-        <p className="text-sm text-foreground/60">
-          {role === "lawyer" && "يومك ومهامك وجلساتك"}
-          {role === "researcher" && "مذكراتك وأبحاثك"}
-          {(role === "system_admin" || role === "supervisor") && "نظرة عامة على المكتب وصحة النظام"}
-          {role === "secretary" && "الاستلام والمواعيد والوكالات"}
-          {role === "accountant" && "الفواتير والتحصيلات والمصاريف"}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-amiri text-2xl font-bold text-navy">لوحة التحكم</h1>
+          <p className="text-sm text-foreground/60">
+            {role === "lawyer" && "يومك ومهامك وجلساتك"}
+            {role === "researcher" && "مذكراتك وأبحاثك"}
+            {(role === "system_admin" || role === "supervisor") && "نظرة عامة على المكتب وصحة النظام"}
+            {role === "secretary" && "الاستلام والمواعيد والوكالات"}
+            {role === "accountant" && "الفواتير والتحصيلات والمصاريف"}
+          </p>
+        </div>
+        <DashboardCustomizer widgets={DASHBOARD_WIDGETS} visible={Array.from(visible)} />
       </div>
 
-      {/* التقويم العدلي: بارز أعلى للمحامي/الباحث/السكرتارية */}
-      {(role === "lawyer" || role === "researcher" || role === "secretary") && (
-        <JudicialCalendarWidget user={session.user} />
-      )}
+      {DASHBOARD_WIDGETS.filter((w) => visible.has(w.id)).map((w) => (
+        <div key={w.id}>{widgetNodes[w.id]}</div>
+      ))}
 
-      {role === "lawyer" && <LawyerView user={session.user} />}
-      {role === "researcher" && <ResearcherView user={session.user} />}
-      {(role === "system_admin" || role === "supervisor") && <AdminView />}
-      {role === "secretary" && <SecretaryView />}
-      {role === "accountant" && <AccountantView />}
-
-      {/* التقويم العدلي: مع الإحصائيات لمسؤول النظام، وأسفل للمحاسب */}
-      {(role === "system_admin" || role === "supervisor" || role === "accountant") && (
-        <JudicialCalendarWidget user={session.user} />
+      {visible.size === 0 && (
+        <p className="rounded-xl border border-dashed border-black/10 bg-white px-5 py-10 text-center text-sm text-foreground/50">
+          كل الودجتات مخفية — استخدم «⚙️ تخصيص اللوحة» لإظهار ما تريد.
+        </p>
       )}
     </div>
   );
+}
+
+/** ملخص لوحتي حسب الدور (KPIs وقوائم القضايا/الخدمات) — الودجت `role_overview`. */
+function RoleOverview({ user }: { user: SessionUser }) {
+  switch (user.role) {
+    case "lawyer":
+      return <LawyerView user={user} />;
+    case "researcher":
+      return <ResearcherView user={user} />;
+    case "system_admin":
+    case "supervisor":
+      return <AdminView />;
+    case "secretary":
+      return <SecretaryView />;
+    case "accountant":
+      return <AccountantView />;
+    default:
+      return null;
+  }
 }
 
 /* ═══════════ المحامي ═══════════ */

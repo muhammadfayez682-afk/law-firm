@@ -67,8 +67,20 @@ model User {
   completedPrepTasks      SessionPreparationTask[]
   archivedCases           Case[]                   @relation("CaseArchivedBy")
   deletedCases            Case[]                   @relation("CaseDeletedBy")
+  dashboardPreference     UserDashboardPreference?
 
   @@map("users")
+}
+
+// تفضيلات لوحة التحكم لكل مستخدم — الودجتات الظاهرة (إظهار/إخفاء). قابل للتوسّع لاحقًا لترتيب مخصّص.
+model UserDashboardPreference {
+  id             String   @id @default(uuid())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String   @unique
+  visibleWidgets String[] // معرّفات الودجتات الظاهرة
+  updatedAt      DateTime @updatedAt
+
+  @@map("user_dashboard_preferences")
 }
 
 enum ClientType {

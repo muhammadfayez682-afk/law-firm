@@ -22,6 +22,122 @@ function myTasksWhere(userId: string) {
   return { OR: [{ assignedToId: userId }, { assignees: { some: { userId } } }] };
 }
 
+const SESSION_TYPE_LABELS_AR: Record<string, string> = {
+  negotiation_meeting: "جلسة تسوية ودية",
+  hearing: "جلسة محكمة",
+  initial_listening: "استماع أولي",
+  verdict: "نطق بالحكم",
+  arbitration: "تحكيم",
+};
+
+export type MyTaskRow = {
+  id: string;
+  title: string;
+  taskNumber: string;
+  caseId: string | null;
+  caseTitle: string | null;
+  dueDate: string | null;
+  status: string; // الحالة الفعّالة للمكلّف الحالي (أو حالة المهمة إن لا سجل مكلّف)
+  isOverdue: boolean;
+  isDueSoon: boolean; // مستحقة خلال يومين ولم تُنجَز
+};
+
+// ══════════ مهامي (شخصي — لكل الأدوار) ══════════
+export async function getMyTasks(user: SessionUser): Promise<MyTaskRow[]> {
+  const now = new Date();
+  const soon = new Date(now.getTime() + 2 * MS_DAY);
+
+  // النشطة فقط (نستبعد الملغاة والمرفوضة والمنجزة على مستوى المهمة).
+  const tasks = await prisma.task.findMany({
+    where: {
+      ...myTasksWhere(user.id),
+      cancelledAt: null,
+      status: { notIn: ["cancelled", "rejected", "completed"] },
+    },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    take: 12,
+    select: {
+      id: true,
+      title: true,
+      taskNumber: true,
+      status: true,
+      dueDate: true,
+      case: { select: { id: true, title: true } },
+      // حالة المكلّف الحالي المستقلة (لا حالة المهمة العامة).
+      assignees: { where: { userId: user.id }, select: { status: true } },
+    },
+  });
+
+  return tasks
+    .map((t) => {
+      // حالة المكلّف المستقلة تتقدّم على حالة المهمة العامة إن وُجد سجل مكلّف.
+      const assigneeStatus = t.assignees[0]?.status ?? null;
+      const done = assigneeStatus === "completed" || t.status === "completed";
+      const effectiveStatus = assigneeStatus ?? t.status;
+      const isOverdue = !done && t.dueDate != null && t.dueDate < now;
+      const isDueSoon = !done && !isOverdue && t.dueDate != null && t.dueDate <= soon;
+      return {
+        id: t.id,
+        title: t.title,
+        taskNumber: t.taskNumber,
+        caseId: t.case?.id ?? null,
+        caseTitle: t.case?.title ?? null,
+        dueDate: t.dueDate?.toISOString() ?? null,
+        status: effectiveStatus,
+        isOverdue,
+        isDueSoon,
+      };
+    })
+    // المتأخرة أولًا، ثم القريبة، ثم البقية — مع الحفاظ على الترتيب الزمني داخل كل مجموعة.
+    .sort((a, b) => Number(b.isOverdue) - Number(a.isOverdue) || Number(b.isDueSoon) - Number(a.isDueSoon));
+}
+
+export type MySessionRow = {
+  id: string;
+  caseId: string;
+  caseTitle: string;
+  caseNumber: string;
+  sessionTypeLabel: string;
+  sessionDate: string;
+  sessionMode: string;
+  meetingLink: string | null;
+  court: string | null;
+  isToday: boolean;
+  isTomorrow: boolean;
+};
+
+// ══════════ جلساتي القادمة (شخصي — جلسات قضايا المستخدم) ══════════
+export async function getMySessions(user: SessionUser): Promise<MySessionRow[]> {
+  const now = new Date();
+  const { start: todayStart } = dayBounds(now);
+  const todayEnd = new Date(todayStart.getTime() + MS_DAY);
+  const tomorrowEnd = new Date(todayStart.getTime() + 2 * MS_DAY);
+
+  const sessions = await prisma.session.findMany({
+    where: { case: caseVisibilityWhere(user), sessionDate: { gte: now }, status: "scheduled" },
+    orderBy: { sessionDate: "asc" },
+    take: 10,
+    include: { case: { select: { id: true, title: true, internalNumber: true, displayNumber: true } } },
+  });
+
+  return sessions.map((s) => {
+    const d = s.sessionDate;
+    return {
+      id: s.id,
+      caseId: s.caseId,
+      caseTitle: s.case.title,
+      caseNumber: s.case.displayNumber ?? s.case.internalNumber,
+      sessionTypeLabel: SESSION_TYPE_LABELS_AR[s.sessionType] ?? s.sessionType,
+      sessionDate: d.toISOString(),
+      sessionMode: s.sessionMode,
+      meetingLink: s.meetingLink,
+      court: s.court,
+      isToday: d >= todayStart && d < todayEnd,
+      isTomorrow: d >= todayEnd && d < tomorrowEnd,
+    };
+  });
+}
+
 // ══════════ المحامي ══════════
 export async function getLawyerDashboard(user: SessionUser) {
   const now = new Date();
