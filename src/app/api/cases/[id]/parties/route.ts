@@ -5,16 +5,25 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase, canEditCase } from "@/lib/rbac";
 import { PARTY_ROLE_LABELS_AR } from "@/lib/parties";
-import { isValidSaudiPhone, normalizeSaudiPhone } from "@/lib/validators";
+import {
+  isValidSaudiPhone,
+  normalizeSaudiPhone,
+  isPartyType,
+  partyIdentityError,
+  type PartyType,
+} from "@/lib/validators";
 import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 
 type Params = { params: Promise<{ id: string }> };
 
-/** تحقق صيغة جوال/هوية الطرف — يُعيد رسالة خطأ أو null. */
-function partyNumberError(phone?: string, identityNumber?: string): string | null {
+/** تحقق صيغة جوال/هوية الطرف حسب نوعه — يُعيد رسالة خطأ أو null. */
+function partyNumberError(
+  partyType: PartyType,
+  phone?: string,
+  identityNumber?: string,
+): string | null {
   if (phone && !isValidSaudiPhone(phone)) return "رقم جوال الطرف يجب أن يكون 10 أرقام يبدأ بـ 05";
-  if (identityNumber && !/^\d{10}$/.test(identityNumber)) return "رقم هوية الطرف يجب أن يكون 10 أرقام";
-  return null;
+  return partyIdentityError(partyType, identityNumber);
 }
 
 async function loadCase(id: string) {
@@ -72,9 +81,10 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
   }
 
+  const partyType: PartyType = isPartyType(body.partyType) ? body.partyType : "individual";
   const phone = body.phone?.trim() ? normalizeSaudiPhone(body.phone.trim()) : "";
   const identityNumber = body.identityNumber?.trim() || "";
-  const numberError = partyNumberError(phone, identityNumber);
+  const numberError = partyNumberError(partyType, phone, identityNumber);
   if (numberError) return NextResponse.json({ error: numberError }, { status: 400 });
 
   const force = body.force === true;
@@ -83,7 +93,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       const dup = await checkPhoneDuplicate(phone);
       if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
     }
-    if (identityNumber) {
+    // جهة حكومية: الرقم مرجعي حر بلا تحقق صارم، فلا نُخضعه لفحص التكرار.
+    if (identityNumber && partyType !== "government") {
       const dup = await checkIdentityDuplicate(identityNumber);
       if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
     }
@@ -93,6 +104,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     data: {
       caseId: id,
       role,
+      partyType,
       name,
       identityNumber: identityNumber || null,
       phone: phone || null,
@@ -134,11 +146,19 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "صفة غير صالحة" }, { status: 400 });
   }
 
+  // النوع الفعّال بعد التعديل: القيمة الجديدة إن أُرسلت، وإلا نوع الطرف الحالي.
+  if (body.partyType !== undefined && !isPartyType(body.partyType)) {
+    return NextResponse.json({ error: "نوع الطرف غير صالح" }, { status: 400 });
+  }
+  const effectiveType: PartyType = isPartyType(body.partyType)
+    ? body.partyType
+    : (party.partyType as PartyType);
+
   const newPhone = body.phone !== undefined && body.phone?.trim()
     ? normalizeSaudiPhone(body.phone.trim())
     : "";
   const newIdentity = body.identityNumber !== undefined ? body.identityNumber?.trim() || "" : "";
-  const numberError = partyNumberError(newPhone, newIdentity);
+  const numberError = partyNumberError(effectiveType, newPhone, newIdentity);
   if (numberError) return NextResponse.json({ error: numberError }, { status: 400 });
 
   const force = body.force === true;
@@ -147,7 +167,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       const dup = await checkPhoneDuplicate(newPhone, { excludePartyId: partyId });
       if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
     }
-    if (newIdentity && newIdentity !== party.identityNumber) {
+    if (newIdentity && newIdentity !== party.identityNumber && effectiveType !== "government") {
       const dup = await checkIdentityDuplicate(newIdentity, { excludePartyId: partyId });
       if (dup.hasDuplicate) return NextResponse.json(duplicatePayload(dup), { status: 409 });
     }
@@ -157,6 +177,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     where: { id: partyId },
     data: {
       role: body.role ?? undefined,
+      partyType: isPartyType(body.partyType) ? body.partyType : undefined,
       name: typeof body.name === "string" && body.name.trim() ? body.name.trim() : undefined,
       identityNumber: body.identityNumber !== undefined ? body.identityNumber?.trim() || null : undefined,
       phone: body.phone !== undefined ? newPhone || null : undefined,

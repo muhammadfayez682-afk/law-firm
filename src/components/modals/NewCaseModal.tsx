@@ -9,6 +9,7 @@ import {
   OPPOSING_ROLE,
   PARTY_ROLE_LABELS_AR,
 } from "@/lib/parties";
+import { partyIdentityError, type PartyType } from "@/lib/validators";
 import { NumberField } from "@/components/ui/NumberField";
 import { DefinedField } from "@/components/ui/DefinedField";
 import { DuplicateWarningModal } from "@/components/modals/DuplicateWarningModal";
@@ -32,6 +33,14 @@ const PRIORITY_OPTIONS: { value: CasePriority; label: string }[] = [
   { value: "high", label: "عالية" },
   { value: "urgent", label: "عاجلة" },
 ];
+
+// نوع الطرف المقابل — يحكم تسمية حقل الرقم وقاعدة تحققه.
+const PARTY_TYPE_META: Record<PartyType, { label: string; idLabel: string; placeholder: string }> = {
+  individual: { label: "فرد", idLabel: "رقم الهوية", placeholder: "1XXXXXXXXX" },
+  company: { label: "شركة", idLabel: "رقم السجل التجاري", placeholder: "XXXXXXXXXX" },
+  government: { label: "جهة حكومية", idLabel: "رقم مرجعي (اختياري)", placeholder: "بلا رقم" },
+};
+const PARTY_TYPE_ORDER: PartyType[] = ["individual", "company", "government"];
 
 const inputClass =
   "w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold";
@@ -63,8 +72,8 @@ export function NewCaseModal({
 
   const [clientPartyRole, setClientPartyRole] = useState<PartyRole | "">("");
   const [opposingParties, setOpposingParties] = useState<
-    { name: string; identityNumber: string; opposingCounsel: string }[]
-  >([{ name: "", identityNumber: "", opposingCounsel: "" }]);
+    { name: string; partyType: PartyType; identityNumber: string; opposingCounsel: string }[]
+  >([{ name: "", partyType: "individual", identityNumber: "", opposingCounsel: "" }]);
 
   const opposingRoleLabel = clientPartyRole
     ? PARTY_ROLE_LABELS_AR[OPPOSING_ROLE[clientPartyRole]]
@@ -132,6 +141,13 @@ export function NewCaseModal({
       errors.conflictCheckConfirmed = "إقرار التحقق من تعارض المصالح إلزامي";
     }
 
+    // تحقق رقم كل طرف مقابل حسب نوعه (جهة حكومية بلا تحقق صارم).
+    opposingParties.forEach((p, index) => {
+      if (!p.name.trim()) return;
+      const idError = partyIdentityError(p.partyType, p.identityNumber);
+      if (idError) errors[`opposing_${index}`] = idError;
+    });
+
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
       setError("الرجاء تصحيح الحقول المطلوبة أدناه");
@@ -156,6 +172,7 @@ export function NewCaseModal({
         .map((p) => ({
           name: p.name.trim(),
           role: clientPartyRole ? OPPOSING_ROLE[clientPartyRole] : undefined,
+          partyType: p.partyType,
           identityNumber: p.identityNumber.trim() || null,
           opposingCounsel: p.opposingCounsel.trim() || null,
         })),
@@ -535,6 +552,25 @@ export function NewCaseModal({
             <div className="space-y-3">
               {opposingParties.map((party, index) => (
                 <div key={index} className="rounded-lg border border-black/10 p-3">
+                  <div className="mb-3">
+                    <label className={labelClass}>نوع الطرف</label>
+                    <div className="flex gap-2">
+                      {PARTY_TYPE_ORDER.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => updateOpposing(index, "partyType", t)}
+                          className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                            party.partyType === t
+                              ? "bg-gold text-navy"
+                              : "border border-black/10 text-navy hover:bg-black/5"
+                          }`}
+                        >
+                          {PARTY_TYPE_META[t].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <label className={labelClass}>الاسم</label>
@@ -545,15 +581,27 @@ export function NewCaseModal({
                       />
                     </div>
                     <div>
-                      <label className={labelClass}>رقم الهوية / السجل</label>
+                      <label className={labelClass}>{PARTY_TYPE_META[party.partyType].idLabel}</label>
                       <input
                         value={party.identityNumber}
-                        onChange={(e) => updateOpposing(index, "identityNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
-                        inputMode="numeric"
-                        maxLength={10}
+                        onChange={(e) =>
+                          updateOpposing(
+                            index,
+                            "identityNumber",
+                            party.partyType === "government"
+                              ? e.target.value.slice(0, 30)
+                              : e.target.value.replace(/\D/g, "").slice(0, 10),
+                          )
+                        }
+                        inputMode={party.partyType === "government" ? "text" : "numeric"}
+                        maxLength={party.partyType === "government" ? 30 : 10}
+                        placeholder={PARTY_TYPE_META[party.partyType].placeholder}
                         className={inputClass}
                         dir="ltr"
                       />
+                      {fieldErrors[`opposing_${index}`] && (
+                        <p className="mt-1 text-xs text-red-600">{fieldErrors[`opposing_${index}`]}</p>
+                      )}
                     </div>
                     <div>
                       <label className={labelClass}>محامي الطرف المقابل</label>
@@ -583,7 +631,7 @@ export function NewCaseModal({
               onClick={() =>
                 setOpposingParties((prev) => [
                   ...prev,
-                  { name: "", identityNumber: "", opposingCounsel: "" },
+                  { name: "", partyType: "individual", identityNumber: "", opposingCounsel: "" },
                 ])
               }
               className="mt-3 rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5"

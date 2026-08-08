@@ -239,11 +239,19 @@ enum PartyRole {
   third_party // طرف ثالث
 }
 
+// نوع الطرف — يحدّد قاعدة تحقق الرقم: فرد=هوية(1/2+10)، شركة=سجل(10)، جهة حكومية=بلا صيغة.
+enum PartyType {
+  individual // فرد
+  company // شركة
+  government // جهة حكومية (نيابة/وزارة...)
+}
+
 model CaseParty {
   id              String    @id @default(uuid())
   case            Case      @relation(fields: [caseId], references: [id])
   caseId          String
   role            PartyRole
+  partyType       PartyType @default(individual) // فرد/شركة/جهة حكومية — يحكم تحقق الرقم
   name            String
   identityNumber  String?
   phone           String?

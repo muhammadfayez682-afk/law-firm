@@ -82,6 +82,32 @@ export function isValidNationalIdOrCr(value: string, type: "individual" | "compa
   return type === "individual" ? isValidSaudiId(value) : isValidCommercialRegister(value);
 }
 
+/** أنواع الطرف المقابل — تحدّد قاعدة تحقق رقمه. */
+export type PartyType = "individual" | "company" | "government";
+export const PARTY_TYPES: readonly PartyType[] = ["individual", "company", "government"] as const;
+export function isPartyType(v: unknown): v is PartyType {
+  return typeof v === "string" && (PARTY_TYPES as readonly string[]).includes(v);
+}
+
+/**
+ * تحقق رقم هوية/سجل الطرف المقابل حسب نوعه — يُعيد رسالة خطأ أو null.
+ * الرقم اختياري لكل الأنواع؛ يُتحقق فقط عند إدخاله:
+ * - فرد: يبدأ بـ 1 (هوية) أو 2 (إقامة) و10 أرقام (صيغة فقط، دون Luhn — قد لا نملك رقم الخصم دقيقًا).
+ * - شركة: سجل تجاري من 10 أرقام (دون تشديد على البادئة).
+ * - جهة حكومية: لا صيغة مفروضة إطلاقًا (النيابة/الوزارات قد لا يكون لها رقم بهذه الصيغة).
+ */
+export function partyIdentityError(partyType: PartyType, value: string | null | undefined): string | null {
+  const v = (value ?? "").trim();
+  if (partyType === "government") return null; // بلا تحقق صارم
+  if (!v) return null; // اختياري
+  if (partyType === "company") {
+    return /^\d{10}$/.test(v) ? null : "رقم السجل التجاري للطرف يجب أن يتكوّن من 10 أرقام";
+  }
+  return /^[12]\d{9}$/.test(v)
+    ? null
+    : "رقم هوية الطرف يجب أن يبدأ بـ 1 (هوية) أو 2 (إقامة) ويتكوّن من 10 أرقام";
+}
+
 /** قوة كلمة المرور: 8 أحرف على الأقل + حرف كبير + صغير + رقم. */
 export function passwordStrengthError(password: string): string | null {
   if (password.length < 8) return "كلمة المرور يجب أن تكون 8 أحرف على الأقل";

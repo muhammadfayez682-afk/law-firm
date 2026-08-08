@@ -12,6 +12,9 @@ import {
   isValidSaudiPhone,
   nationalIdOrCrError,
   normalizeSaudiPhone,
+  isPartyType,
+  partyIdentityError,
+  type PartyType,
   VALIDATION_MESSAGES,
 } from "@/lib/validators";
 import {
@@ -155,12 +158,21 @@ export async function POST(request: NextRequest) {
   type OpposingPartyPayload = {
     name?: string;
     role?: PartyRole;
+    partyType?: PartyType;
     identityNumber?: string | null;
     opposingCounsel?: string | null;
   };
   const opposingParties = (Array.isArray(body.opposingParties)
     ? body.opposingParties
     : []) as OpposingPartyPayload[];
+
+  // تحقق رقم كل طرف مقابل حسب نوعه (فرد/شركة/جهة حكومية) — الجهة الحكومية بلا صيغة مفروضة.
+  for (const p of opposingParties) {
+    if (!p.name || !p.name.trim()) continue;
+    const pType: PartyType = isPartyType(p.partyType) ? p.partyType : "individual";
+    const idError = partyIdentityError(pType, p.identityNumber ?? "");
+    if (idError) return NextResponse.json({ error: idError }, { status: 400 });
+  }
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -226,6 +238,7 @@ export async function POST(request: NextRequest) {
           .filter((p) => p.name && p.name.trim())
           .map((p) => ({
             role: p.role ?? OPPOSING_ROLE[clientPartyRole],
+            partyType: isPartyType(p.partyType) ? p.partyType : "individual",
             name: p.name!.trim(),
             identityNumber: p.identityNumber?.trim() || null,
             opposingCounsel: p.opposingCounsel?.trim() || null,
