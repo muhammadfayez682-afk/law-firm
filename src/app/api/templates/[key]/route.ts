@@ -5,12 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
 import { getTemplateDefinition, isIntakeEligibleTemplate, firstMissingRequiredField } from "@/lib/templates/definitions";
-import {
-  SESSION_REPORT_KEY,
-  findEarliestHeldSessionMissingReport,
-  notifySessionReportRequired,
-  reportBlockedMessage,
-} from "@/lib/sessionReport";
 
 type Params = { params: Promise<{ key: string }> };
 
@@ -74,24 +68,6 @@ export async function POST(request: NextRequest, { params }: Params) {
       { error: `حقل «${missing.label}» إلزامي — لا يمكن حفظ النموذج دون تعبئته.` },
       { status: 400 }
     );
-  }
-
-  // القيد التسلسلي الزمني: لا يُكتب تقرير جلسة ما دامت جلسة منعقدة أسبق زمنيًا بلا تقرير مكتمل.
-  if (definition.key === SESSION_REPORT_KEY && sessionId) {
-    const thisSession = await prisma.session.findUnique({
-      where: { id: sessionId },
-      select: { id: true, caseId: true, sessionDate: true },
-    });
-    if (thisSession) {
-      const blocker = await findEarliestHeldSessionMissingReport(prisma, thisSession.caseId, {
-        beforeDate: thisSession.sessionDate,
-        excludeSessionId: thisSession.id,
-      });
-      if (blocker) {
-        await notifySessionReportRequired(prisma, thisSession.caseId, blocker, session.user.id);
-        return NextResponse.json({ error: reportBlockedMessage(blocker) }, { status: 400 });
-      }
-    }
   }
 
   const created = await prisma.filledTemplate.create({

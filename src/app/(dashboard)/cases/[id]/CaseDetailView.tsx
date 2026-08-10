@@ -45,6 +45,7 @@ import { canEditField } from "@/lib/editPermissions";
 import { CLIENT_PARTY_ROLE_OPTIONS } from "@/lib/parties";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
 import { isJudicialHoliday, addBusinessDays } from "@/lib/judicialCalendar";
+import { SessionReportModal } from "@/components/cases/SessionReportModal";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
 import { MEMO_STATUS_LABELS_AR, MEMO_STATUS_STYLES } from "@/lib/memos";
 import { TASK_STATUS_LABELS_AR, TASK_STATUS_STYLES } from "@/lib/tasks";
@@ -77,7 +78,7 @@ type FullCase = Omit<Case, "claimValue"> & {
   parties: (CaseParty & { linkedClient: Client | null })[];
   team: (CaseTeamMember & { user: User })[];
   documents: (Document & { uploadedBy: User })[];
-  sessions: (CaseSession & { preparationChecklist: PrepTask[] })[];
+  sessions: (CaseSession & { preparationChecklist: PrepTask[]; hasReport: boolean })[];
   amicableSettlement: AmicableSettlement | null;
   closureRequest: (CaseClosureRequest & { requestedBy: User; approvedBy: User | null }) | null;
   reopenLogs: (CaseReopenLog & { reopenedBy: User })[];
@@ -136,7 +137,6 @@ const SESSION_STATUS_STYLES: Record<CaseSession["status"], string> = {
 const CASE_QUICK_TEMPLATES: { key: string; label: string }[] = [
   { key: "case_followup", label: "متابعة سير القضية" },
   { key: "case_path", label: "تحديد مسار" },
-  { key: "session_report", label: "تقرير جلسة" },
   { key: "case_analysis", label: "تحليل قضية" },
 ];
 
@@ -193,6 +193,7 @@ export function CaseDetailView({
   archiveInfo: ArchiveInfo;
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [reportForSession, setReportForSession] = useState<string | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showClosureModal, setShowClosureModal] = useState(false);
   const [showNewTask, setShowNewTask] = useState(false);
@@ -685,11 +686,18 @@ export function CaseDetailView({
                         {s.court ? ` · ${s.court}` : ""}
                       </p>
                       {s.status === "held" && (
-                        s.memoId ? (
-                          <span className="mt-1 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">📝 موثّقة</span>
-                        ) : (
-                          <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">⚠️ بانتظار المذكرة</span>
-                        )
+                        <span className="mt-1 flex flex-wrap gap-1">
+                          {s.memoId ? (
+                            <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">📝 موثّقة</span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">⚠️ بانتظار المذكرة</span>
+                          )}
+                          {s.hasReport ? (
+                            <span className="inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700">📄 تقرير مكتمل</span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700">📄 بلا تقرير</span>
+                          )}
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-2">
@@ -712,21 +720,22 @@ export function CaseDetailView({
                       >
                         {SESSION_STATUS_LABELS_AR[s.status]}
                       </span>
-                      {reportBlock && reportBlock.id !== s.id &&
+                      {reportBlock && reportBlock.id !== s.id && !s.hasReport &&
                       new Date(s.sessionDate).getTime() >= new Date(reportBlock.sessionDate).getTime() ? (
                         <span
                           className="cursor-not-allowed text-xs text-foreground/30"
                           title={`أكمل تقرير الجلسة السابقة بتاريخ ${reportBlock.hijriDate ?? ""}هـ أولًا.`}
                         >
-                          إنشاء تقرير الجلسة
+                          تقرير الجلسة
                         </span>
                       ) : (
-                        <Link
-                          href={`/templates/session_report/fill?caseId=${caseData.id}&sessionId=${s.id}`}
+                        <button
+                          type="button"
+                          onClick={() => setReportForSession(s.id)}
                           className="text-xs text-taradhi hover:underline"
                         >
-                          إنشاء تقرير الجلسة
-                        </Link>
+                          {s.hasReport ? "عرض/تعديل التقرير" : "تقرير الجلسة"}
+                        </button>
                       )}
                     </div>
                   </li>
@@ -893,6 +902,9 @@ export function CaseDetailView({
           fields={editFields}
           onClose={() => setShowEditModal(false)}
         />
+      )}
+      {reportForSession && (
+        <SessionReportModal sessionId={reportForSession} onClose={() => setReportForSession(null)} />
       )}
     </div>
   );

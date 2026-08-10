@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { SessionStatus, SessionType } from "@prisma/client";
 import { formatDualDate, getDayNameAr, formatTime } from "@/lib/dateUtils";
+import { SessionReportModal } from "@/components/cases/SessionReportModal";
 
 export type SessionRow = {
   id: string;
@@ -39,6 +40,7 @@ const STATUS_CONFIG: Record<SessionStatus, { label: string; className: string }>
 export function SessionsTable({ rows }: { rows: SessionRow[] }) {
   const [minutesFor, setMinutesFor] = useState<SessionRow | null>(null);
   const [postponeFor, setPostponeFor] = useState<SessionRow | null>(null);
+  const [reportFor, setReportFor] = useState<SessionRow | null>(null);
 
   return (
     <>
@@ -106,12 +108,13 @@ export function SessionsTable({ rows }: { rows: SessionRow[] }) {
                       >
                         {r.hasMinutes ? "تعديل المحضر" : "تسجيل المحضر"}
                       </button>
-                      <Link
-                        href={`/templates/session_report/fill?caseId=${r.caseId}&sessionId=${r.id}`}
+                      <button
+                        type="button"
+                        onClick={() => setReportFor(r)}
                         className="rounded-lg border border-gold/40 px-2.5 py-1 font-medium text-gold hover:bg-gold/10"
                       >
                         تقرير الجلسة
-                      </Link>
+                      </button>
                       {r.status !== "postponed" && (
                         <button
                           type="button"
@@ -143,6 +146,9 @@ export function SessionsTable({ rows }: { rows: SessionRow[] }) {
       )}
       {postponeFor && (
         <PostponeModal session={postponeFor} onClose={() => setPostponeFor(null)} />
+      )}
+      {reportFor && (
+        <SessionReportModal sessionId={reportFor.id} onClose={() => setReportFor(null)} />
       )}
     </>
   );

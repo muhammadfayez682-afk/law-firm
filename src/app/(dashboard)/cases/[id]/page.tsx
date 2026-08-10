@@ -44,6 +44,7 @@ export default async function CaseDetailPage({
             orderBy: { createdAt: "asc" },
             include: { completedBy: { select: { fullName: true } } },
           },
+          report: { select: { id: true } },
         },
       },
       amicableSettlement: true,
@@ -167,6 +168,7 @@ export default async function CaseDetailPage({
     claimValue: caseData.claimValue ? Number(caseData.claimValue) : null,
     sessions: caseData.sessions.map((s) => ({
       ...s,
+      hasReport: s.report != null,
       preparationChecklist: s.preparationChecklist.map((t) => ({
         id: t.id,
         taskType: t.taskType,

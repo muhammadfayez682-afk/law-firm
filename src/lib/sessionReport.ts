@@ -1,10 +1,9 @@
-// منطق تقرير الجلسة (session_report) والقيد التسلسلي الزمني — يُشترك بين مسارات الحفظ/الجلسات.
+// منطق تقرير الجلسة الداخلي (SessionReport) والقيد التسلسلي الزمني + الصلاحية.
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { toHijri } from "@/lib/dateUtils";
 import { notifyBulk } from "@/lib/notifications/send";
 import { attendingLawyerIds } from "@/lib/sessionMemo";
-
-export const SESSION_REPORT_KEY = "session_report";
+import { isSystemAdmin, type SessionUser } from "@/lib/rbac";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -13,17 +12,25 @@ export function isSessionSummaryFilled(v: unknown): boolean {
   return typeof v === "string" && v.trim().length > 0;
 }
 
-/** «تقرير مكتمل» لجلسة = وجود FilledTemplate(session_report) مرتبط بها بملخص جلسة غير فارغ. */
-export function isCompleteSessionReport(data: unknown): boolean {
-  if (!data || typeof data !== "object") return false;
-  return isSessionSummaryFilled((data as Record<string, unknown>).sessionSummary);
+/**
+ * صلاحية كتابة/تعديل تقرير الجلسة:
+ * المحامي الحاضر (فريق القضية من المحامين/المشرفين) + المحامي المسؤول + مسؤول النظام.
+ * (لا الباحثون — تقرير الجلسة للمحامي الحاضر لا كاتب المذكرة.)
+ */
+export function canWriteSessionReport(
+  user: SessionUser,
+  caseData: { responsibleLawyerId: string; team: { userId: string; roleInCase: import("@prisma/client").CaseTeamRole }[] },
+): boolean {
+  if (isSystemAdmin(user.role)) return true;
+  return attendingLawyerIds(caseData).includes(user.id);
 }
 
 export type BlockingSession = { id: string; sessionDate: Date; hijriDate: string | null };
 
 /**
  * أقدم جلسة **منعقدة (held)** في القضية بلا تقرير مكتمل، أسبق زمنيًا من `beforeDate` — أو null.
- * الترتيب بـ sessionDate الفعلي لا ترتيب الإدخال. الجلسات المؤجّلة/غير المنعقدة تُتجاوز تمامًا.
+ * «تقرير مكتمل» = وجود SessionReport (والملخص إلزامي غير فارغ على الـ API، فوجود السجل يكفي).
+ * الترتيب بـ sessionDate الفعلي. الجلسات المؤجّلة/غير المنعقدة تُتجاوز تمامًا.
  * - `beforeDate`: يُحصر البحث بالجلسات الأقدم منه (حصريًا). أهمِله لفحص كل الجلسات المنعقدة.
  * - `excludeSessionId`: يُستبعد (الجلسة التي نكتب تقريرها الآن).
  */
@@ -36,23 +43,15 @@ export async function findEarliestHeldSessionMissingReport(
     where: {
       caseId,
       status: "held",
+      report: null, // لا تقرير مرتبط = ناقص
       ...(opts.beforeDate ? { sessionDate: { lt: opts.beforeDate } } : {}),
       ...(opts.excludeSessionId ? { id: { not: opts.excludeSessionId } } : {}),
     },
     orderBy: { sessionDate: "asc" },
+    take: 1,
     select: { id: true, sessionDate: true, hijriDate: true },
   });
-  if (heldSessions.length === 0) return null;
-
-  const reports = await db.filledTemplate.findMany({
-    where: { templateKey: SESSION_REPORT_KEY, sessionId: { in: heldSessions.map((s) => s.id) } },
-    select: { sessionId: true, data: true },
-  });
-  const completeSessionIds = new Set(
-    reports.filter((r) => isCompleteSessionReport(r.data)).map((r) => r.sessionId),
-  );
-
-  return heldSessions.find((s) => !completeSessionIds.has(s.id)) ?? null;
+  return heldSessions[0] ?? null;
 }
 
 function blockerHijri(blocker: BlockingSession): string {

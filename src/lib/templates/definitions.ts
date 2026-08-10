@@ -169,29 +169,8 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
       { kind: "field", key: "nextAction", label: "الإجراء القادم", type: "textarea" },
     ],
   },
-  {
-    key: "session_report",
-    name: "تقرير الجلسة",
-    category: "case_progress",
-    description:
-      "يُعد هذا النموذج لما دار في الجلسة القضائية، ويهدف إلى توثيق مجريات الجلسة بدقة لضمان استمرارية العمل دون فقدان أي معلومة.",
-    linkedTo: "case_session",
-    items: [
-      { kind: "field", key: "weekday", label: "اليوم", type: "text", autofill: "weekday", half: true },
-      { kind: "field", key: "date", label: "التاريخ", type: "text", autofill: "dateHijriGregorian", half: true },
-      { kind: "field", key: "courtName", label: "المحكمة الناظرة للقضية", type: "text", autofill: "courtName", half: true },
-      { kind: "field", key: "department", label: "الدائرة", type: "text", autofill: "courtDepartment", half: true },
-      { kind: "field", key: "judgeName", label: "فضيلة القاضي", type: "text", autofill: "judgeName" },
-      { kind: "field", key: "caseNumber", label: "رقم الدعوى", type: "text", autofill: "courtCaseNumber", half: true },
-      { kind: "field", key: "caseClassification", label: "تصنيف القضية", type: "text", autofill: "caseTypeLabel", half: true },
-      { kind: "field", key: "plaintiff", label: "المدعي", type: "text", autofill: "plaintiffName" },
-      { kind: "field", key: "defendant", label: "المدعى عليه", type: "text", autofill: "defendantName" },
-      { kind: "field", key: "sessionSummary", label: "ملخص الجلسة من قبل المحامي حاضر الجلسة", type: "textarea", required: true },
-      { kind: "field", key: "sessionNotes", label: "الملاحظات على ضبط الجلسة", type: "textarea" },
-      { kind: "field", key: "proposedDirection", label: "توجه مقترح (أفكار مبدئية)", type: "textarea" },
-      { kind: "field", key: "responsibleLawyer", label: "المحامي المسؤول", type: "text", autofill: "lawyerName" },
-    ],
-  },
+  // ملاحظة: نموذج «تقرير الجلسة» انتُقل إلى كيان داخلي مستقل (SessionReport) بخانات منظّمة
+  // تُدخل وتُعرض داخل النظام مباشرةً — انظر /api/sessions/[id]/report والمكوّن SessionReportModal.
   {
     key: "procedure_minutes",
     name: "نموذج محضر إجراء",

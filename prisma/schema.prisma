@@ -65,6 +65,7 @@ model User {
   serviceDocuments        ServiceDocument[]
   serviceNotes            ServiceNote[]
   completedPrepTasks      SessionPreparationTask[]
+  sessionReports          SessionReport[]
   archivedCases           Case[]                   @relation("CaseArchivedBy")
   deletedCases            Case[]                   @relation("CaseDeletedBy")
   dashboardPreference     UserDashboardPreference?
@@ -468,11 +469,28 @@ model Session {
   preparationChecklist   SessionPreparationTask[]
   minutes        SessionMinutes?
   filledTemplates FilledTemplate[]
+  report          SessionReport?
   // مذكرة الجلسة الإلزامية للجلسات المنعقدة (الإلزام منطقي في الـ API لا قيد schema).
   memo           LegalMemo?       @relation("SessionMemo", fields: [memoId], references: [id])
   memoId         String?
 
   @@map("sessions")
+}
+
+// تقرير الجلسة الداخلي — خانات منظّمة (منفصل عن FilledTemplate وعن مذكرة الجلسة LegalMemo).
+model SessionReport {
+  id                String   @id @default(uuid())
+  session           Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId         String   @unique // تقرير واحد لكل جلسة
+  sessionSummary    String   @db.Text // ملخص الجلسة — إلزامي منطقيًا (غير فارغ)
+  courtNotes        String?  @db.Text // الملاحظات على ضبط الجلسة — اختياري
+  proposedDirection String?  @db.Text // توجّه مقترح (أفكار مبدئية) — اختياري
+  createdBy         User     @relation(fields: [createdById], references: [id])
+  createdById       String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("session_reports")
 }
 
 enum PrepTaskType {
