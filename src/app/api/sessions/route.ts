@@ -6,6 +6,11 @@ import { canEditCase, caseVisibilityWhere } from "@/lib/rbac";
 import { toHijri, formatDualDate } from "@/lib/dateUtils";
 import { notifyBulk } from "@/lib/notifications/send";
 import { isJudicialHoliday } from "@/lib/judicialCalendar";
+import {
+  findEarliestHeldSessionMissingReport,
+  notifySessionReportRequired,
+  addSessionBlockedMessage,
+} from "@/lib/sessionReport";
 
 export async function GET(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -76,6 +81,18 @@ export async function POST(request: NextRequest) {
   }
 
   const sessionDate = new Date(body.sessionDate);
+
+  // القيد التسلسلي: لا تُضاف جلسة جديدة يدويًا ما دامت جلسة منعقدة أسبق زمنيًا بلا تقرير مكتمل.
+  const reportBlocker = await findEarliestHeldSessionMissingReport(prisma, body.caseId, {
+    beforeDate: sessionDate,
+  });
+  if (reportBlocker) {
+    await notifySessionReportRequired(prisma, body.caseId, reportBlocker, session.user.id);
+    return NextResponse.json(
+      { error: "session_report_required", message: addSessionBlockedMessage(reportBlocker) },
+      { status: 400 }
+    );
+  }
 
   // منع جدولة جلسة في يوم عطلة رسمية قضائية (المحاكم مغلقة).
   const holiday = isJudicialHoliday(sessionDate);

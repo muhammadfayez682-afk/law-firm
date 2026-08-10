@@ -94,6 +94,12 @@ export function TemplateFillForm({
   function validateLinkage(): string | null {
     if (needsCase && !selectedCaseId) return "الرجاء اختيار القضية أولًا";
     if (needsSession && !selectedSessionId) return "الرجاء اختيار الجلسة أولًا";
+    // الحقول الإلزامية (مثل «ملخص الجلسة») — يُفرض أيضًا على الـ API.
+    for (const item of definition.items) {
+      if (item.kind === "field" && item.required && !(values[item.key] ?? "").trim()) {
+        return `حقل «${item.label}» إلزامي`;
+      }
+    }
     return null;
   }
 
@@ -222,7 +228,9 @@ export function TemplateFillForm({
             {definition.items.map((item) =>
               item.kind === "field" ? (
                 <div key={item.key}>
-                  <label className="mb-1.5 block text-sm font-medium text-navy">{item.label}</label>
+                  <label className="mb-1.5 block text-sm font-medium text-navy">
+                    {item.label} {item.required && <span className="text-red-600">*</span>}
+                  </label>
                   {item.type === "textarea" ? (
                     <textarea
                       rows={3}

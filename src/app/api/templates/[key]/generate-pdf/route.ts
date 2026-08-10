@@ -6,7 +6,13 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
-import { getTemplateDefinition, isIntakeEligibleTemplate } from "@/lib/templates/definitions";
+import { getTemplateDefinition, isIntakeEligibleTemplate, firstMissingRequiredField } from "@/lib/templates/definitions";
+import {
+  SESSION_REPORT_KEY,
+  findEarliestHeldSessionMissingReport,
+  notifySessionReportRequired,
+  reportBlockedMessage,
+} from "@/lib/sessionReport";
 import { generateTemplatePdf } from "@/lib/pdf/generateTemplate";
 
 const GENERATED_ROOT = path.join(process.cwd(), "public", "generated");
@@ -63,6 +69,33 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
     if (!canAccessCase(session.user, caseData)) {
       return NextResponse.json({ error: "لا تملك صلاحية الوصول لهذه القضية" }, { status: 403 });
+    }
+  }
+
+  // تحقق الحقول الإلزامية (مثل «ملخص الجلسة») قبل توليد PDF.
+  const missing = firstMissingRequiredField(definition, data);
+  if (missing) {
+    return NextResponse.json(
+      { error: `حقل «${missing.label}» إلزامي — لا يمكن توليد النموذج دون تعبئته.` },
+      { status: 400 }
+    );
+  }
+
+  // القيد التسلسلي الزمني لتقرير الجلسة.
+  if (definition.key === SESSION_REPORT_KEY && sessionId) {
+    const thisSession = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { id: true, caseId: true, sessionDate: true },
+    });
+    if (thisSession) {
+      const blocker = await findEarliestHeldSessionMissingReport(prisma, thisSession.caseId, {
+        beforeDate: thisSession.sessionDate,
+        excludeSessionId: thisSession.id,
+      });
+      if (blocker) {
+        await notifySessionReportRequired(prisma, thisSession.caseId, blocker, session.user.id);
+        return NextResponse.json({ error: reportBlockedMessage(blocker) }, { status: 400 });
+      }
     }
   }
 

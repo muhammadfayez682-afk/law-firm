@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase, caseVisibilityWhere } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
 import { getTemplateDefinition, isIntakeEligibleTemplate, type AutofillKey } from "@/lib/templates/definitions";
-import { formatDualDate, formatDualDateTime, getDayNameAr } from "@/lib/dateUtils";
+import { formatDualDate, formatDualDateTime, getDayNameAr, toHijri, toGregorian } from "@/lib/dateUtils";
 import { PARTY_ROLE_LABELS_AR } from "@/lib/parties";
 import { TemplateFillForm } from "./TemplateFillForm";
 
@@ -78,10 +78,15 @@ export default async function TemplateFillPage({
   }
 
   const now = new Date();
+  // تاريخ التقرير = تاريخ الجلسة نفسها (لا تاريخ اليوم) عند وجود سياق جلسة — إصلاح العيب السياقي.
+  const reportDate = selectedSession?.sessionDate ?? now;
+  const sessionDualDate = selectedSession
+    ? `${selectedSession.hijriDate ?? toHijri(selectedSession.sessionDate)}هـ (${toGregorian(selectedSession.sessionDate)}م)`
+    : formatDualDate(now);
   const autofillValues: Partial<Record<AutofillKey, string>> = {
     lawyerName: session.user.name ?? "",
-    dateHijriGregorian: formatDualDate(now),
-    weekday: getDayNameAr(now),
+    dateHijriGregorian: sessionDualDate,
+    weekday: getDayNameAr(reportDate),
   };
 
   // سياق الاستلام: تحميل الطلب وتعبئة بيانات العميل الأولية.
@@ -116,6 +121,8 @@ export default async function TemplateFillPage({
     autofillValues.primaryCaseNumber = selectedCase.displayNumber ?? selectedCase.internalNumber;
     autofillValues.caseTitle = selectedCase.title;
     autofillValues.courtName = selectedCase.courtName ?? "";
+    autofillValues.courtDepartment = selectedCase.department ?? "";
+    autofillValues.judgeName = selectedCase.judge ?? "";
     autofillValues.courtCaseNumber = selectedCase.courtCaseNumber ?? "";
     autofillValues.caseTypeLabel = CASE_TYPE_LABELS_AR[selectedCase.caseType] ?? selectedCase.caseType;
 

@@ -21,6 +21,8 @@ const CASE_EDITABLE_FIELDS = [
   "title",
   "courtCaseNumber",
   "courtName",
+  "department",
+  "judge",
   "caseType",
   "claimValue",
   "priority",

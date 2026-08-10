@@ -194,6 +194,8 @@ model Case {
   title                  String
   caseType               CaseType
   courtName              String?
+  department             String? // الدائرة الناظرة للقضية (تُعبَّأ في تقرير الجلسة تلقائيًا)
+  judge                  String? // فضيلة القاضي (تُعبَّأ في تقرير الجلسة تلقائيًا)
   claimValue             Decimal?                @db.Decimal(14, 2)
   client                 Client                  @relation(fields: [clientId], references: [id])
   clientId               String
@@ -1076,6 +1078,7 @@ enum NotificationType {
   session_prep_urgent // تحضير الجلسة قبل 24 ساعة
   session_prep_critical // عنصر حرج غير جاهز (وكالة/مذكرة)
   session_memo_required // جلسة منعقدة بلا مذكرة — مطلوب كتابة/ربط مذكرة
+  session_report_required // جلسة منعقدة بلا تقرير — يحجب التقرير التالي/إضافة جلسة
 
   // الوكالات
   agency_expiring_soon

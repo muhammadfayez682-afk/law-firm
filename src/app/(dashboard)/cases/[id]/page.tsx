@@ -15,6 +15,7 @@ import { canReviewMemo } from "@/lib/memos";
 import { displayTaskStatus, getAssignableUsers } from "@/lib/tasks";
 import { canArchiveCase, canRestoreCase, checkDeleteEligibility } from "@/lib/caseArchive";
 import { ALL_DELEGATED_PERMISSIONS, DELEGATED_PERMISSION_LABELS_AR } from "@/lib/caseDelegation";
+import { findEarliestHeldSessionMissingReport } from "@/lib/sessionReport";
 import { CaseDetailView } from "./CaseDetailView";
 
 export default async function CaseDetailPage({
@@ -200,9 +201,16 @@ export default async function CaseDetailPage({
     dueDate: t.dueDate?.toISOString() ?? null,
   }));
 
+  // القيد التسلسلي: أقدم جلسة منعقدة بلا تقرير مكتمل — تحجب تقارير الجلسات اللاحقة وإضافة جلسة.
+  const blocker = await findEarliestHeldSessionMissingReport(prisma, id);
+  const reportBlock = blocker
+    ? { id: blocker.id, sessionDate: blocker.sessionDate.toISOString(), hijriDate: blocker.hijriDate }
+    : null;
+
   return (
     <CaseDetailView
       caseData={serializedCase}
+      reportBlock={reportBlock}
       canEdit={canEditCase(session.user, caseData)}
       flowStages={flowStages}
       firstStage={firstStage}

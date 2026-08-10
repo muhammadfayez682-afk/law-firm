@@ -4,7 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessCase } from "@/lib/rbac";
 import { canAccessIntake } from "@/lib/intake";
-import { getTemplateDefinition, isIntakeEligibleTemplate } from "@/lib/templates/definitions";
+import { getTemplateDefinition, isIntakeEligibleTemplate, firstMissingRequiredField } from "@/lib/templates/definitions";
+import {
+  SESSION_REPORT_KEY,
+  findEarliestHeldSessionMissingReport,
+  notifySessionReportRequired,
+  reportBlockedMessage,
+} from "@/lib/sessionReport";
 
 type Params = { params: Promise<{ key: string }> };
 
@@ -61,6 +67,33 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
   }
 
+  // تحقق الحقول الإلزامية (مثل «ملخص الجلسة» في تقرير الجلسة) — يُفرض على الـ API لا الواجهة فقط.
+  const missing = firstMissingRequiredField(definition, data);
+  if (missing) {
+    return NextResponse.json(
+      { error: `حقل «${missing.label}» إلزامي — لا يمكن حفظ النموذج دون تعبئته.` },
+      { status: 400 }
+    );
+  }
+
+  // القيد التسلسلي الزمني: لا يُكتب تقرير جلسة ما دامت جلسة منعقدة أسبق زمنيًا بلا تقرير مكتمل.
+  if (definition.key === SESSION_REPORT_KEY && sessionId) {
+    const thisSession = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { id: true, caseId: true, sessionDate: true },
+    });
+    if (thisSession) {
+      const blocker = await findEarliestHeldSessionMissingReport(prisma, thisSession.caseId, {
+        beforeDate: thisSession.sessionDate,
+        excludeSessionId: thisSession.id,
+      });
+      if (blocker) {
+        await notifySessionReportRequired(prisma, thisSession.caseId, blocker, session.user.id);
+        return NextResponse.json({ error: reportBlockedMessage(blocker) }, { status: 400 });
+      }
+    }
+  }
+
   const created = await prisma.filledTemplate.create({
     data: {
       templateKey: key,
@@ -69,6 +102,15 @@ export async function POST(request: NextRequest, { params }: Params) {
       sessionId,
       filledBy: session.user.id,
       data,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      userId: session.user.id,
+      action: "create",
+      resourceType: "FilledTemplate",
+      resourceId: created.id,
     },
   });
 

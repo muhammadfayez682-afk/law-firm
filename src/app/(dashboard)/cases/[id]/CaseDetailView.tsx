@@ -162,8 +162,10 @@ export function CaseDetailView({
   delegationInfo,
   timelineInfo,
   archiveInfo,
+  reportBlock,
 }: {
   caseData: FullCase;
+  reportBlock: { id: string; sessionDate: string; hijriDate: string | null } | null;
   canEdit: boolean;
   flowStages: CaseFlowStage[];
   firstStage: CaseFlowStage | null;
@@ -204,6 +206,8 @@ export function CaseDetailView({
     { name: "internalNumber", label: "الرقم الداخلي", type: "text", value: caseData.internalNumber, ...lockState(lock("internalNumber")) },
     { name: "courtCaseNumber", label: "رقم القضية بالمحكمة", type: "text", value: caseData.courtCaseNumber ?? "", ...lockState(lock("courtCaseNumber")) },
     { name: "courtName", label: "المحكمة", type: "text", value: caseData.courtName ?? "", ...lockState(lock("courtName")) },
+    { name: "department", label: "الدائرة", type: "text", value: caseData.department ?? "", ...lockState(lock("department")) },
+    { name: "judge", label: "فضيلة القاضي", type: "text", value: caseData.judge ?? "", ...lockState(lock("judge")) },
     {
       name: "caseType",
       label: "نوع القضية",
@@ -317,7 +321,13 @@ export function CaseDetailView({
             <button
               type="button"
               onClick={() => setShowScheduleModal(true)}
-              className="rounded-lg bg-taradhi px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              disabled={reportBlock != null}
+              title={
+                reportBlock
+                  ? `أكمل تقرير الجلسة المنعقدة بتاريخ ${reportBlock.hijriDate ?? ""}هـ قبل إضافة جلسة جديدة.`
+                  : undefined
+              }
+              className="rounded-lg bg-taradhi px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               جدولة جلسة
             </button>
@@ -693,12 +703,22 @@ export function CaseDetailView({
                       >
                         {SESSION_STATUS_LABELS_AR[s.status]}
                       </span>
-                      <Link
-                        href={`/templates/session_report/fill?caseId=${caseData.id}&sessionId=${s.id}`}
-                        className="text-xs text-taradhi hover:underline"
-                      >
-                        إنشاء تقرير الجلسة
-                      </Link>
+                      {reportBlock && reportBlock.id !== s.id &&
+                      new Date(s.sessionDate).getTime() >= new Date(reportBlock.sessionDate).getTime() ? (
+                        <span
+                          className="cursor-not-allowed text-xs text-foreground/30"
+                          title={`أكمل تقرير الجلسة السابقة بتاريخ ${reportBlock.hijriDate ?? ""}هـ أولًا.`}
+                        >
+                          إنشاء تقرير الجلسة
+                        </span>
+                      ) : (
+                        <Link
+                          href={`/templates/session_report/fill?caseId=${caseData.id}&sessionId=${s.id}`}
+                          className="text-xs text-taradhi hover:underline"
+                        >
+                          إنشاء تقرير الجلسة
+                        </Link>
+                      )}
                     </div>
                   </li>
                 ))}

@@ -10,6 +10,8 @@ export type AutofillKey =
   | "dateHijriGregorian"
   | "weekday"
   | "courtName"
+  | "courtDepartment"
+  | "judgeName"
   | "courtCaseNumber"
   | "caseTypeLabel"
   | "plaintiffName"
@@ -26,6 +28,7 @@ export type TemplateField = {
   options?: string[];
   autofill?: AutofillKey;
   half?: boolean;
+  required?: boolean; // حقل إلزامي — يُرفض الحفظ إن كان فارغًا (يُفرض على الـ API)
 };
 
 export type TemplateMatrixColumn = {
@@ -177,13 +180,13 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
       { kind: "field", key: "weekday", label: "اليوم", type: "text", autofill: "weekday", half: true },
       { kind: "field", key: "date", label: "التاريخ", type: "text", autofill: "dateHijriGregorian", half: true },
       { kind: "field", key: "courtName", label: "المحكمة الناظرة للقضية", type: "text", autofill: "courtName", half: true },
-      { kind: "field", key: "department", label: "الدائرة", type: "text", half: true },
-      { kind: "field", key: "judgeName", label: "فضيلة القاضي", type: "text" },
+      { kind: "field", key: "department", label: "الدائرة", type: "text", autofill: "courtDepartment", half: true },
+      { kind: "field", key: "judgeName", label: "فضيلة القاضي", type: "text", autofill: "judgeName" },
       { kind: "field", key: "caseNumber", label: "رقم الدعوى", type: "text", autofill: "courtCaseNumber", half: true },
       { kind: "field", key: "caseClassification", label: "تصنيف القضية", type: "text", autofill: "caseTypeLabel", half: true },
       { kind: "field", key: "plaintiff", label: "المدعي", type: "text", autofill: "plaintiffName" },
       { kind: "field", key: "defendant", label: "المدعى عليه", type: "text", autofill: "defendantName" },
-      { kind: "field", key: "sessionSummary", label: "ملخص الجلسة من قبل المحامي حاضر الجلسة", type: "textarea" },
+      { kind: "field", key: "sessionSummary", label: "ملخص الجلسة من قبل المحامي حاضر الجلسة", type: "textarea", required: true },
       { kind: "field", key: "sessionNotes", label: "الملاحظات على ضبط الجلسة", type: "textarea" },
       { kind: "field", key: "proposedDirection", label: "توجه مقترح (أفكار مبدئية)", type: "textarea" },
       { kind: "field", key: "responsibleLawyer", label: "المحامي المسؤول", type: "text", autofill: "lawyerName" },
@@ -285,6 +288,20 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
 
 export function getTemplateDefinition(key: string): TemplateDefinition | undefined {
   return TEMPLATE_DEFINITIONS.find((t) => t.key === key);
+}
+
+/** أول حقل إلزامي فارغ في بيانات التعبئة، أو null إن اكتملت الحقول الإلزامية. */
+export function firstMissingRequiredField(
+  definition: TemplateDefinition,
+  data: Record<string, unknown>,
+): TemplateField | null {
+  for (const item of definition.items) {
+    if (item.kind === "field" && item.required) {
+      const v = data[item.key];
+      if (typeof v !== "string" || v.trim().length === 0) return item;
+    }
+  }
+  return null;
 }
 
 /**
