@@ -2,10 +2,11 @@
 // ملف نقيّ (بلا خادم) يُستورد في الواجهة والـ API لتوحيد المعرّفات والتحقق منها.
 
 export type DashboardWidgetId =
+  | "kpis"
   | "my_tasks"
   | "my_sessions"
-  | "role_overview"
-  | "judicial_calendar";
+  | "judicial_calendar"
+  | "role_overview";
 
 export type DashboardWidgetMeta = {
   id: DashboardWidgetId;
@@ -13,20 +14,22 @@ export type DashboardWidgetMeta = {
   description: string;
 };
 
-// الترتيب هنا = ترتيب العرض الثابت في اللوحة (الإظهار/الإخفاء لا يغيّره).
+// الترتيب هنا = ترتيب الظهور في مودال التخصيص (ترتيب العرض الفعلي يُحدَّد في صفحة اللوحة).
 export const DASHBOARD_WIDGETS: readonly DashboardWidgetMeta[] = [
+  { id: "kpis", label: "الأرقام السريعة", description: "شريط مضغوط بمؤشرات دورك الرئيسية" },
   { id: "my_tasks", label: "مهامي", description: "المهام المسندة إليك مع حالتها وتاريخ استحقاقها" },
   { id: "my_sessions", label: "جلساتي القادمة", description: "جلسات ومواعيد قضاياك القادمة مرتّبة زمنيًا" },
-  { id: "role_overview", label: "ملخص لوحتي", description: "المؤشرات والقوائم الخاصة بدورك (KPIs وقضاياك وخدماتك)" },
   { id: "judicial_calendar", label: "التقويم العدلي", description: "أيام العمل والعطل الرسمية وجلسات الأسبوع" },
+  { id: "role_overview", label: "تفاصيل لوحتي", description: "التنبيهات والقوائم الخاصة بدورك (قضاياك وخدماتك ومواعيدك)" },
 ] as const;
 
-// الافتراضي عند أول دخول: مجموعة منطقية ظاهرة (كل الودجتات — العمل الشخصي + المؤشرات + التقويم).
+// الافتراضي عند أول دخول: كل الودجتات ظاهرة.
 export const DEFAULT_VISIBLE_WIDGETS: DashboardWidgetId[] = [
+  "kpis",
   "my_tasks",
   "my_sessions",
-  "role_overview",
   "judicial_calendar",
+  "role_overview",
 ];
 
 const VALID_IDS = new Set<string>(DASHBOARD_WIDGETS.map((w) => w.id));
