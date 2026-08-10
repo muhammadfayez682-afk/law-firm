@@ -77,6 +77,10 @@ export const NOTIFICATION_META: Record<NotificationType, NotificationMeta> = {
   session_prep_critical: { label: "عنصر تحضير حرج غير جاهز", description: "الوكالة أو المذكرات غير جاهزة قبل الجلسة", icon: "🚨", category: "session", defaultPriority: "urgent" },
   session_memo_required: { label: "مطلوب مذكرة الجلسة", description: "جلسة منعقدة بلا مذكرة — اكتب أو اربط مذكرة", icon: "📝", category: "session", defaultPriority: "high" },
   session_report_required: { label: "مطلوب تقرير الجلسة", description: "جلسة منعقدة بلا تقرير — يحجب كتابة التقرير التالي وإضافة جلسة", icon: "📄", category: "session", defaultPriority: "high" },
+  appeal_deadline_soon: { label: "مهلة استئناف تقترب", description: "مهلة الطعن بالاستئناف تقترب (7/3 أيام)", icon: "🛑", category: "session", defaultPriority: "high" },
+  appeal_deadline_urgent: { label: "مهلة استئناف عاجلة", description: "مهلة الطعن بالاستئناف خلال يوم", icon: "🛑", category: "session", defaultPriority: "urgent" },
+  appeal_deadline_missing: { label: "مهلة الاستئناف غير مسجّلة", description: "حكم ابتدائي بلا مهلة استئناف مسجّلة — سجّلها", icon: "⚠️", category: "session", defaultPriority: "high" },
+  follow_up_reminder: { label: "متابعة القضية", description: "تاريخ متابعة القضية يقترب", icon: "🔔", category: "session", defaultPriority: "normal" },
 
   // الوكالات
   agency_expiring_soon: { label: "وكالة تقترب من الانتهاء", description: "وكالة تنتهي خلال 30 يومًا", icon: "📜", category: "agency", defaultPriority: "normal" },

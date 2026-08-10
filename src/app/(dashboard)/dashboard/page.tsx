@@ -10,6 +10,7 @@ import {
   getSecretaryDashboard,
   getMyTasks,
   getMySessions,
+  getCriticalDates,
 } from "@/lib/dashboard-role";
 import type { SessionUser } from "@/lib/rbac";
 import { formatDualDate, formatTime, getDayNameAr } from "@/lib/dateUtils";
@@ -19,6 +20,7 @@ import { SERVICE_STATUS_LABELS_AR, SERVICE_STATUS_STYLES } from "@/lib/services"
 import { JudicialCalendarWidget } from "@/components/dashboard/JudicialCalendarWidget";
 import { MyTasksWidget } from "@/components/dashboard/MyTasksWidget";
 import { MySessionsWidget } from "@/components/dashboard/MySessionsWidget";
+import { CriticalDatesWidget } from "@/components/dashboard/CriticalDatesWidget";
 import { DashboardCustomizer } from "@/components/dashboard/DashboardCustomizer";
 import {
   DASHBOARD_WIDGETS,
@@ -67,9 +69,10 @@ export default async function DashboardPage() {
   const needRole = visible.has("kpis") || visible.has("role_overview");
 
   // نجلب بيانات الودجتات الظاهرة فقط (توفيرًا للاستعلامات).
-  const [myTasks, mySessions, roleData] = await Promise.all([
+  const [myTasks, mySessions, criticalDates, roleData] = await Promise.all([
     visible.has("my_tasks") ? getMyTasks(user) : Promise.resolve([]),
     visible.has("my_sessions") ? getMySessions(user) : Promise.resolve([]),
+    visible.has("critical_dates") ? getCriticalDates(user) : Promise.resolve([]),
     needRole ? getRoleData(user) : Promise.resolve(null),
   ]);
 
@@ -94,6 +97,9 @@ export default async function DashboardPage() {
 
       {/* 2) شريط الأرقام السريعة المضغوط */}
       {visible.has("kpis") && roleData && <RoleKpiBar roleData={roleData} />}
+
+      {/* 2.ب التواريخ الحرجة (مهل استئناف/متابعة) — بارزة أعلى العمل اليومي */}
+      {visible.has("critical_dates") && <CriticalDatesWidget items={criticalDates} />}
 
       {/* 3) العمل اليومي: مهامي (يمين) + جلساتي القادمة (يسار) */}
       {(visible.has("my_tasks") || visible.has("my_sessions")) &&

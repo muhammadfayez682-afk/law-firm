@@ -203,6 +203,8 @@ model Case {
   outcome                CaseOutcome?
   openDate               DateTime                @default(now())
   closedDate             DateTime?
+  appealDeadline         DateTime? // مهلة الاستئناف — آخر يوم للطعن (يدوي؛ يبرز عند الحكم الابتدائي)
+  followUpDate           DateTime? // تاريخ المتابعة القادم (يدوي مستقل عن الجلسات)
   responsibleLawyer      User                    @relation("ResponsibleLawyer", fields: [responsibleLawyerId], references: [id])
   responsibleLawyerId    String
   createdBy              User?                   @relation("CaseCreator", fields: [createdById], references: [id])
@@ -1079,6 +1081,10 @@ enum NotificationType {
   session_prep_critical // عنصر حرج غير جاهز (وكالة/مذكرة)
   session_memo_required // جلسة منعقدة بلا مذكرة — مطلوب كتابة/ربط مذكرة
   session_report_required // جلسة منعقدة بلا تقرير — يحجب التقرير التالي/إضافة جلسة
+  appeal_deadline_soon // مهلة استئناف تقترب (7/3 أيام)
+  appeal_deadline_urgent // مهلة استئناف عاجلة (يوم واحد)
+  appeal_deadline_missing // حكم ابتدائي بلا مهلة استئناف مسجّلة — سجّلها
+  follow_up_reminder // تاريخ متابعة القضية يقترب
 
   // الوكالات
   agency_expiring_soon

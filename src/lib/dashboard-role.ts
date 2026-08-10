@@ -22,6 +22,65 @@ function myTasksWhere(userId: string) {
   return { OR: [{ assignedToId: userId }, { assignees: { some: { userId } } }] };
 }
 
+export type CriticalDateItem = {
+  id: string;
+  caseId: string;
+  caseTitle: string;
+  caseNumber: string;
+  kind: "appeal" | "appeal_missing" | "follow_up";
+  date: string | null; // ISO أو null (للمهلة غير المسجّلة)
+  daysLeft: number | null;
+};
+
+// ══════════ تواريخ حرجة (مهل استئناف + متابعات) — مقيّدة بصلاحية المستخدم ══════════
+export async function getCriticalDates(user: SessionUser): Promise<CriticalDateItem[]> {
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 30 * MS_DAY); // نافذة العرض: 30 يومًا قادمة
+  const caseWhere = caseVisibilityWhere(user);
+
+  const cases = await prisma.case.findMany({
+    where: {
+      ...caseWhere,
+      status: { notIn: ["closed", "archived"] },
+      OR: [
+        { appealDeadline: { not: null, lte: horizon } },
+        { followUpDate: { not: null, lte: horizon } },
+        { status: "ruled_first_instance", appealDeadline: null },
+      ],
+    },
+    select: {
+      id: true,
+      title: true,
+      internalNumber: true,
+      displayNumber: true,
+      status: true,
+      appealDeadline: true,
+      followUpDate: true,
+    },
+  });
+
+  const items: CriticalDateItem[] = [];
+  const daysLeft = (d: Date) => Math.ceil((d.getTime() - now.getTime()) / MS_DAY);
+  for (const c of cases) {
+    const base = { caseId: c.id, caseTitle: c.title, caseNumber: c.displayNumber ?? c.internalNumber };
+    if (c.appealDeadline && c.appealDeadline <= horizon) {
+      items.push({ id: `appeal:${c.id}`, ...base, kind: "appeal", date: c.appealDeadline.toISOString(), daysLeft: daysLeft(c.appealDeadline) });
+    } else if (c.status === "ruled_first_instance" && !c.appealDeadline) {
+      items.push({ id: `appeal_missing:${c.id}`, ...base, kind: "appeal_missing", date: null, daysLeft: null });
+    }
+    if (c.followUpDate && c.followUpDate <= horizon) {
+      items.push({ id: `follow:${c.id}`, ...base, kind: "follow_up", date: c.followUpDate.toISOString(), daysLeft: daysLeft(c.followUpDate) });
+    }
+  }
+
+  // الترتيب: مهلة غير مسجّلة أولًا (أخطر)، ثم بالأقرب زمنيًا.
+  return items.sort((a, b) => {
+    const ka = a.daysLeft ?? -Infinity;
+    const kb = b.daysLeft ?? -Infinity;
+    return ka - kb;
+  });
+}
+
 const SESSION_TYPE_LABELS_AR: Record<string, string> = {
   negotiation_meeting: "جلسة تسوية ودية",
   hearing: "جلسة محكمة",

@@ -4,6 +4,8 @@ export type CalendarEventType =
   | "session" // جلسة محكمة (مرافعة/استماع/نطق حكم/تحكيم)
   | "settlement_meeting" // جلسة تسوية ودية (قوى/تراضي)
   | "settlement_deadline" // مهلة تسوية ودية
+  | "appeal_deadline" // مهلة استئناف (آخر يوم للطعن)
+  | "follow_up" // تاريخ متابعة القضية
   | "task_deadline"; // استحقاق مهمة مرتبطة بقضية
 
 export type CalendarEvent = {
@@ -45,6 +47,18 @@ export const CALENDAR_EVENT_META: Record<CalendarEventType, CalendarEventMeta> =
     dot: "bg-red-500",
     chip: "bg-red-50 text-red-700 border-red-300",
   },
+  appeal_deadline: {
+    label: "مهلة استئناف",
+    icon: "🛑",
+    dot: "bg-rose-600",
+    chip: "bg-rose-100 text-rose-800 border-rose-400",
+  },
+  follow_up: {
+    label: "متابعة",
+    icon: "🔔",
+    dot: "bg-sky-500",
+    chip: "bg-sky-50 text-sky-700 border-sky-300",
+  },
   task_deadline: {
     label: "استحقاق مهمة",
     icon: "📌",
@@ -57,5 +71,7 @@ export const CALENDAR_EVENT_ORDER: CalendarEventType[] = [
   "session",
   "settlement_meeting",
   "settlement_deadline",
+  "appeal_deadline",
+  "follow_up",
   "task_deadline",
 ];

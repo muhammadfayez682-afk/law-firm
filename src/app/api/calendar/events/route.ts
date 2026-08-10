@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
   const caseWhere = caseVisibilityWhere(session.user);
   const caseSelect = { select: { id: true, title: true, internalNumber: true, displayNumber: true } };
 
-  const [sessions, settlements, tasks] = await Promise.all([
+  const [sessions, settlements, tasks, appealCases, followUpCases] = await Promise.all([
     prisma.session.findMany({
       where: { case: caseWhere, sessionDate: { gte: from, lte: to } },
       include: { case: caseSelect },
@@ -68,6 +68,15 @@ export async function GET(request: NextRequest) {
         dueDate: { gte: from, lte: to },
       },
       include: { case: caseSelect },
+    }),
+    // مهل الاستئناف وتواريخ المتابعة أحداث على مستوى القضية نفسها.
+    prisma.case.findMany({
+      where: { ...caseWhere, appealDeadline: { gte: from, lte: to } },
+      select: { id: true, title: true, internalNumber: true, displayNumber: true, appealDeadline: true },
+    }),
+    prisma.case.findMany({
+      where: { ...caseWhere, followUpDate: { gte: from, lte: to } },
+      select: { id: true, title: true, internalNumber: true, displayNumber: true, followUpDate: true },
     }),
   ]);
 
@@ -117,6 +126,36 @@ export async function GET(request: NextRequest) {
       end: null,
       location: null,
       url: `/tasks/${t.id}`,
+    });
+  }
+
+  for (const c of appealCases) {
+    if (!c.appealDeadline) continue;
+    events.push({
+      id: `appeal:${c.id}`,
+      type: "appeal_deadline",
+      title: `مهلة استئناف · ${c.title}`,
+      caseId: c.id,
+      caseNumber: caseNumberOf(c),
+      start: c.appealDeadline.toISOString(),
+      end: null,
+      location: null,
+      url: `/cases/${c.id}`,
+    });
+  }
+
+  for (const c of followUpCases) {
+    if (!c.followUpDate) continue;
+    events.push({
+      id: `followup:${c.id}`,
+      type: "follow_up",
+      title: `متابعة · ${c.title}`,
+      caseId: c.id,
+      caseNumber: caseNumberOf(c),
+      start: c.followUpDate.toISOString(),
+      end: null,
+      location: null,
+      url: `/cases/${c.id}`,
     });
   }
 

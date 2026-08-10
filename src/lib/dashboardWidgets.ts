@@ -3,6 +3,7 @@
 
 export type DashboardWidgetId =
   | "kpis"
+  | "critical_dates"
   | "my_tasks"
   | "my_sessions"
   | "judicial_calendar"
@@ -17,6 +18,7 @@ export type DashboardWidgetMeta = {
 // الترتيب هنا = ترتيب الظهور في مودال التخصيص (ترتيب العرض الفعلي يُحدَّد في صفحة اللوحة).
 export const DASHBOARD_WIDGETS: readonly DashboardWidgetMeta[] = [
   { id: "kpis", label: "الأرقام السريعة", description: "شريط مضغوط بمؤشرات دورك الرئيسية" },
+  { id: "critical_dates", label: "تواريخ حرجة", description: "مهل الاستئناف وتواريخ المتابعة القريبة على قضاياك" },
   { id: "my_tasks", label: "مهامي", description: "المهام المسندة إليك مع حالتها وتاريخ استحقاقها" },
   { id: "my_sessions", label: "جلساتي القادمة", description: "جلسات ومواعيد قضاياك القادمة مرتّبة زمنيًا" },
   { id: "judicial_calendar", label: "التقويم العدلي", description: "أيام العمل والعطل الرسمية وجلسات الأسبوع" },
@@ -26,6 +28,7 @@ export const DASHBOARD_WIDGETS: readonly DashboardWidgetMeta[] = [
 // الافتراضي عند أول دخول: كل الودجتات ظاهرة.
 export const DEFAULT_VISIBLE_WIDGETS: DashboardWidgetId[] = [
   "kpis",
+  "critical_dates",
   "my_tasks",
   "my_sessions",
   "judicial_calendar",

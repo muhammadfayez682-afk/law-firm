@@ -24,6 +24,8 @@ const CASE_EDITABLE_FIELDS = [
   "department",
   "judge",
   "caseType",
+  "appealDeadline",
+  "followUpDate",
   "claimValue",
   "priority",
   "notes",
@@ -137,6 +139,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       // تحويل القيمة حسب نوع الحقل.
       if (key === "claimValue") {
         (data as Record<string, unknown>).claimValue = raw === null || raw === "" ? null : Number(raw);
+      } else if (key === "appealDeadline" || key === "followUpDate") {
+        (data as Record<string, unknown>)[key] = raw === null || raw === "" ? null : new Date(String(raw));
       } else if (key === "caseType") {
         (data as Record<string, unknown>).caseType = raw as CaseType;
       } else if (key === "clientPartyRole") {

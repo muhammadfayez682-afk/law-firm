@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
     results.invoiceAlerts +
     results.pendingAgencyAlerts +
     results.sessionPrepAlerts +
-    results.sessionMemoAlerts;
+    results.sessionMemoAlerts +
+    results.appealDeadlineAlerts +
+    results.followUpAlerts;
 
   // شبكة أمان: حذف نهائي للقضايا المحذوفة ناعمًا منذ أكثر من 30 يومًا.
   let purgedCases = 0;

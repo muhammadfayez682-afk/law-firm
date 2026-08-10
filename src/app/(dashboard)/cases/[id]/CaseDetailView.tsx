@@ -44,6 +44,7 @@ import { EntityChangeLog } from "@/components/shared/EntityChangeLog";
 import { canEditField } from "@/lib/editPermissions";
 import { CLIENT_PARTY_ROLE_OPTIONS } from "@/lib/parties";
 import { formatDualDate, formatDualDateTime } from "@/lib/dateUtils";
+import { isJudicialHoliday, addBusinessDays } from "@/lib/judicialCalendar";
 import { canTransitionToPendingClosure } from "@/lib/caseClosure";
 import { MEMO_STATUS_LABELS_AR, MEMO_STATUS_STYLES } from "@/lib/memos";
 import { TASK_STATUS_LABELS_AR, TASK_STATUS_STYLES } from "@/lib/tasks";
@@ -217,6 +218,8 @@ export function CaseDetailView({
       ...lockState(lock("caseType")),
     },
     { name: "claimValue", label: "قيمة المطالبة", type: "number", value: caseData.claimValue != null ? String(caseData.claimValue) : "", ...lockState(lock("claimValue")) },
+    { name: "appealDeadline", label: "مهلة الاستئناف", type: "date", value: caseData.appealDeadline ? new Date(caseData.appealDeadline).toISOString().slice(0, 10) : "", ...lockState(lock("appealDeadline")) },
+    { name: "followUpDate", label: "تاريخ المتابعة", type: "date", value: caseData.followUpDate ? new Date(caseData.followUpDate).toISOString().slice(0, 10) : "", ...lockState(lock("followUpDate")) },
     {
       name: "priority",
       label: "الأولوية",
@@ -361,6 +364,12 @@ export function CaseDetailView({
           isSystemAdmin={isSystemAdmin}
         />
       )}
+
+      <AppealDeadlineBanner
+        status={caseData.status}
+        appealDeadline={caseData.appealDeadline}
+        followUpDate={caseData.followUpDate}
+      />
 
       {/* الأرشفة / الاسترجاع / الحذف النهائي */}
       <CaseArchiveActions
@@ -884,6 +893,83 @@ export function CaseDetailView({
           fields={editFields}
           onClose={() => setShowEditModal(false)}
         />
+      )}
+    </div>
+  );
+}
+
+/* بروز مهلة الاستئناف / تاريخ المتابعة — تحذيري متدرّج، مع تنبيه غياب المهلة عند الحكم الابتدائي. */
+function AppealDeadlineBanner({
+  status,
+  appealDeadline,
+  followUpDate,
+}: {
+  status: string;
+  appealDeadline: string | Date | null;
+  followUpDate: string | Date | null;
+}) {
+  const DAY = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const appeal = appealDeadline ? new Date(appealDeadline) : null;
+  const follow = followUpDate ? new Date(followUpDate) : null;
+  const appealMissing = status === "ruled_first_instance" && !appeal;
+
+  if (!appeal && !follow && !appealMissing) return null;
+
+  const appealDays = appeal ? Math.ceil((appeal.getTime() - now) / DAY) : null;
+  const appealHoliday = appeal ? isJudicialHoliday(appeal) : null;
+  const nextWorking = appealHoliday?.isHoliday ? addBusinessDays(appeal!, 1) : null;
+
+  // شدّة اللون حسب القرب.
+  const appealTone =
+    appealDays == null
+      ? ""
+      : appealDays < 0
+        ? "border-rose-300 bg-rose-100 text-rose-900"
+        : appealDays <= 3
+          ? "border-rose-300 bg-rose-50 text-rose-800"
+          : appealDays <= 7
+            ? "border-amber-300 bg-amber-50 text-amber-800"
+            : "border-black/10 bg-white text-navy";
+
+  const followDays = follow ? Math.ceil((follow.getTime() - now) / DAY) : null;
+
+  return (
+    <div className="space-y-3">
+      {appealMissing && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+          <span className="font-semibold">⚠️ حكم ابتدائي بلا مهلة استئناف مسجّلة</span>
+          <span>— سجّلها من «تعديل البيانات» لتفادي فوات مهلة الطعن.</span>
+        </div>
+      )}
+
+      {appeal && (
+        <div className={`rounded-xl border p-4 text-sm ${appealTone}`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-semibold">🛑 مهلة الاستئناف: {formatDualDate(appeal)}</span>
+            <span className="font-semibold">
+              {appealDays! < 0
+                ? "انقضت المهلة"
+                : appealDays === 0
+                  ? "آخر يوم اليوم"
+                  : `متبقٍ ${toEnglishDigits(appealDays!)} يومًا`}
+            </span>
+          </div>
+          {appealHoliday?.isHoliday && nextWorking && (
+            <p className="mt-2 rounded-lg bg-white/70 px-3 py-1.5 text-xs">
+              🕌 تصادف المهلة عطلة رسمية ({appealHoliday.name ?? "عطلة"}) — أنجِز الطعن قبلها أو في أول يوم عمل ({formatDualDate(nextWorking)}).
+            </p>
+          )}
+        </div>
+      )}
+
+      {follow && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+          <span className="font-semibold">🔔 تاريخ المتابعة القادم: {formatDualDate(follow)}</span>
+          {followDays != null && (
+            <span>{followDays < 0 ? "فات موعد المتابعة" : followDays === 0 ? "اليوم" : `بعد ${toEnglishDigits(followDays)} يومًا`}</span>
+          )}
+        </div>
       )}
     </div>
   );

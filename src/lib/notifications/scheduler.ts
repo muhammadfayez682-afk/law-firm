@@ -18,6 +18,8 @@ export type SchedulerResults = {
   prepChecklistsCreated: number;
   sessionPrepAlerts: number;
   sessionMemoAlerts: number;
+  appealDeadlineAlerts: number;
+  followUpAlerts: number;
 };
 
 /**
@@ -73,6 +75,8 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
     prepChecklistsCreated: 0,
     sessionPrepAlerts: 0,
     sessionMemoAlerts: 0,
+    appealDeadlineAlerts: 0,
+    followUpAlerts: 0,
   };
   const now = Date.now();
 
@@ -176,6 +180,75 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
         resourceType: "settlement",
       });
       if (sent) results.settlementAlerts++;
+    }
+  }
+
+  // ===== 3.ب مهل الاستئناف (7/3/1 يوم — أخطر من التسوية فتذكير أكثف) =====
+  const appealCases = await prisma.case.findMany({
+    where: { appealDeadline: { not: null, lte: new Date(now + 7 * DAY) }, status: { notIn: ["closed", "archived"] } },
+    include: { team: true },
+  });
+  for (const c of appealCases) {
+    if (!c.appealDeadline) continue;
+    const untilMs = new Date(c.appealDeadline).getTime() - now;
+    if (untilMs < 0) continue; // انقضت المهلة — لا تذكير مهلة
+    const caseNo = c.displayNumber ?? c.internalNumber;
+    const urgent = untilMs <= 1 * DAY;
+    const type: NotificationType = urgent ? "appeal_deadline_urgent" : "appeal_deadline_soon";
+    const priority: NotificationPriority = urgent ? "urgent" : "high";
+    const dedup = urgent ? 1 * DAY : 2 * DAY; // تذكير أكثف من التسوية
+    const days = Math.ceil(untilMs / DAY);
+    const recipients = new Set<string>([c.responsibleLawyerId, ...c.team.map((m) => m.userId)]);
+    for (const rid of recipients) {
+      const sent = await notifyOnce(rid, type, c.id, dedup, {
+        priority,
+        title: urgent ? "مهلة استئناف عاجلة" : "مهلة استئناف تقترب",
+        message: `مهلة الاستئناف في القضية ${caseNo} تنتهي خلال ${days} يومًا.`,
+        actionUrl: `/cases/${c.id}`,
+        resourceType: "case",
+      });
+      if (sent) results.appealDeadlineAlerts++;
+    }
+  }
+
+  // ===== 3.ج تنبيه الغياب: حكم ابتدائي بلا مهلة استئناف مسجّلة =====
+  const missingAppeal = await prisma.case.findMany({
+    where: { status: "ruled_first_instance", appealDeadline: null },
+    select: { id: true, responsibleLawyerId: true, displayNumber: true, internalNumber: true },
+  });
+  for (const c of missingAppeal) {
+    const caseNo = c.displayNumber ?? c.internalNumber;
+    const sent = await notifyOnce(c.responsibleLawyerId, "appeal_deadline_missing", c.id, 7 * DAY, {
+      priority: "high",
+      title: "مهلة الاستئناف غير مسجّلة",
+      message: `القضية ${caseNo} بحكم ابتدائي بلا مهلة استئناف مسجّلة — سجّلها لتفادي فوات مهلة الطعن.`,
+      actionUrl: `/cases/${c.id}`,
+      resourceType: "case",
+    });
+    if (sent) results.appealDeadlineAlerts++;
+  }
+
+  // ===== 3.د تواريخ المتابعة (يوم/يومان) =====
+  const followUpCases = await prisma.case.findMany({
+    where: { followUpDate: { not: null, lte: new Date(now + 2 * DAY) }, status: { notIn: ["closed", "archived"] } },
+    include: { team: true },
+  });
+  for (const c of followUpCases) {
+    if (!c.followUpDate) continue;
+    const untilMs = new Date(c.followUpDate).getTime() - now;
+    if (untilMs < 0) continue;
+    const caseNo = c.displayNumber ?? c.internalNumber;
+    const days = Math.max(0, Math.ceil(untilMs / DAY));
+    const recipients = new Set<string>([c.responsibleLawyerId, ...c.team.map((m) => m.userId)]);
+    for (const rid of recipients) {
+      const sent = await notifyOnce(rid, "follow_up_reminder", c.id, 1 * DAY, {
+        priority: "normal",
+        title: "متابعة القضية",
+        message: `موعد متابعة القضية ${caseNo} ${days === 0 ? "اليوم" : `خلال ${days} يومًا`}.`,
+        actionUrl: `/cases/${c.id}`,
+        resourceType: "case",
+      });
+      if (sent) results.followUpAlerts++;
     }
   }
 
