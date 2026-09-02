@@ -765,7 +765,7 @@ export function CaseDetailView({
                       <tr key={d.id} className="border-b border-black/5 last:border-0">
                         <td className="px-5 py-3">
                           <a
-                            href={d.storagePath}
+                            href={`/api/documents/${d.id}/download`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-taradhi hover:underline"

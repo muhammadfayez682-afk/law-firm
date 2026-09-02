@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessIntake } from "@/lib/intake";
+import { uploadToR2, buildDocumentKey, isR2Configured } from "@/lib/r2";
 
 type Params = { params: Promise<{ id: string }> };
-
-const UPLOADS_ROOT = path.join(process.cwd(), "public", "uploads", "intake");
-
-function sanitizeFileName(fileName: string): string {
-  return fileName.replace(/[^\w.؀-ۿ-]/g, "_");
-}
 
 /** رفع مستند أولي لطلب الاستلام (يُنقل للقضية عند التفعيل). */
 export async function POST(request: NextRequest, { params }: Params) {
@@ -33,25 +26,23 @@ export async function POST(request: NextRequest, { params }: Params) {
   const title = (formData.get("title") as string | null)?.trim() || null;
   if (!file) return NextResponse.json({ error: "لم يتم اختيار ملف" }, { status: 400 });
 
-  const uniqueFileName = `${Date.now()}-${sanitizeFileName(file.name)}`;
-  const targetDir = path.join(UPLOADS_ROOT, id);
+  if (!isR2Configured()) {
+    return NextResponse.json({ error: "التخزين السحابي غير مهيأ (R2)" }, { status: 503 });
+  }
 
-  let storagePath: string;
+  let storageKey: string;
   try {
-    await mkdir(targetDir, { recursive: true });
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(targetDir, uniqueFileName), buffer);
-    // TODO: عند الانتقال للتخزين السحابي، استبدل الكتابة أعلاه برفع سحابي.
-    storagePath = `/uploads/intake/${id}/${uniqueFileName}`;
+    storageKey = await uploadToR2(buildDocumentKey("intake", id, file.name), buffer, file.type || undefined);
   } catch {
-    return NextResponse.json({ error: "تعذّر حفظ الملف" }, { status: 500 });
+    return NextResponse.json({ error: "تعذّر رفع الملف إلى التخزين السحابي" }, { status: 500 });
   }
 
   const doc = await prisma.intakeDocument.create({
     data: {
       intakeId: id,
       title: title || file.name,
-      storagePath,
+      storageKey,
       uploadedById: session.user.id,
     },
     include: { uploadedBy: { select: { fullName: true } } },

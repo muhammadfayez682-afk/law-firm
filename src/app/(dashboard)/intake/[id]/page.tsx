@@ -127,7 +127,6 @@ export default async function IntakeDetailPage({
     documents: intake.documents.map((d) => ({
       id: d.id,
       title: d.title,
-      storagePath: d.storagePath,
       uploadedByName: d.uploadedBy.fullName,
     })),
     notes: intake.notes.map((n) => ({

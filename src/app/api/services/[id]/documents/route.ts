@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccessService } from "@/lib/services";
+import { uploadToR2, buildDocumentKey, isR2Configured } from "@/lib/r2";
 
 type Params = { params: Promise<{ id: string }> };
 
-const UPLOADS_ROOT = path.join(process.cwd(), "public", "uploads", "services");
-
-function sanitizeFileName(fileName: string): string {
-  return fileName.replace(/[^\w.؀-ۿ-]/g, "_");
-}
-
-/** رفع مستند لخدمة قانونية (تخزين محلي مؤقت — مثل مستندات القضايا). */
+/** رفع مستند لخدمة قانونية إلى Cloudflare R2. */
 export async function POST(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "غير مصرح" }, { status: 401 });
@@ -37,21 +30,20 @@ export async function POST(request: NextRequest, { params }: Params) {
   const title = (formData.get("title") as string | null)?.trim() || null;
   if (!file) return NextResponse.json({ error: "لم يتم اختيار ملف" }, { status: 400 });
 
-  const targetDir = path.join(UPLOADS_ROOT, id);
-  const uniqueFileName = `${Date.now()}-${sanitizeFileName(file.name)}`;
-  let storagePath: string;
+  if (!isR2Configured()) {
+    return NextResponse.json({ error: "التخزين السحابي غير مهيأ (R2)" }, { status: 503 });
+  }
+
+  let storageKey: string;
   try {
-    await mkdir(targetDir, { recursive: true });
     const buffer = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(targetDir, uniqueFileName), buffer);
-    // TODO: استبدل بالتخزين السحابي عند الإنتاج.
-    storagePath = `/uploads/services/${id}/${uniqueFileName}`;
+    storageKey = await uploadToR2(buildDocumentKey("services", id, file.name), buffer, file.type || undefined);
   } catch {
-    return NextResponse.json({ error: "تعذّر حفظ الملف" }, { status: 500 });
+    return NextResponse.json({ error: "تعذّر رفع الملف إلى التخزين السحابي" }, { status: 500 });
   }
 
   const doc = await prisma.serviceDocument.create({
-    data: { serviceId: id, uploadedById: session.user.id, title: title || file.name, storagePath },
+    data: { serviceId: id, uploadedById: session.user.id, title: title || file.name, storageKey },
     include: { uploadedBy: { select: { fullName: true } } },
   });
 

@@ -33,7 +33,7 @@ export default async function ServiceDetailPage({ params }: { params: Promise<{ 
     createdAt: service.createdAt.toISOString(),
     updatedAt: service.updatedAt.toISOString(),
     notes: service.notes.map((n) => ({ id: n.id, content: n.content, authorName: n.author.fullName, createdAt: n.createdAt.toISOString() })),
-    documents: service.documents.map((d) => ({ id: d.id, title: d.title, storagePath: d.storagePath, uploadedByName: d.uploadedBy.fullName })),
+    documents: service.documents.map((d) => ({ id: d.id, title: d.title, uploadedByName: d.uploadedBy.fullName })),
   };
 
   return (

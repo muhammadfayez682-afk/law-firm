@@ -74,7 +74,7 @@ type IntakeData = {
   advancePaymentReceived: boolean;
   caseId: string | null;
   caseInternalNumber: string | null;
-  documents: { id: string; title: string; storagePath: string; uploadedByName: string }[];
+  documents: { id: string; title: string; uploadedByName: string }[];
   notes: { id: string; content: string; authorName: string; createdAt: string }[];
   filledTemplates: {
     id: string;
@@ -801,7 +801,7 @@ function DocumentsSection({ intake }: { intake: IntakeData }) {
         <ul className="divide-y divide-black/5 text-sm">
           {intake.documents.map((d) => (
             <li key={d.id} className="flex items-center justify-between py-2">
-              <a href={d.storagePath} target="_blank" rel="noopener noreferrer" className="text-taradhi hover:underline">{d.title}</a>
+              <a href={`/api/intake-documents/${d.id}/download`} target="_blank" rel="noopener noreferrer" className="text-taradhi hover:underline">{d.title}</a>
               <span className="text-xs text-foreground/40">{d.uploadedByName}</span>
             </li>
           ))}

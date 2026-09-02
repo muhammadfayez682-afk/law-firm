@@ -97,7 +97,7 @@ export async function POST(request: NextRequest, { params }: Params) {
         // نقل مستندات الاستلام إلى مستندات الخدمة.
         for (const doc of intake.documents) {
           await tx.serviceDocument.create({
-            data: { serviceId: created.id, uploadedById: doc.uploadedById, title: doc.title, storagePath: doc.storagePath },
+            data: { serviceId: created.id, uploadedById: doc.uploadedById, title: doc.title, storagePath: doc.storagePath, storageKey: doc.storageKey },
           });
         }
 
@@ -285,6 +285,7 @@ export async function POST(request: NextRequest, { params }: Params) {
             uploadedById: doc.uploadedById,
             fileName: doc.title,
             storagePath: doc.storagePath,
+            storageKey: doc.storageKey,
             category: "intake",
             visibilityLevel: "case_team",
           },

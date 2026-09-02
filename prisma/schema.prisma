@@ -388,7 +388,8 @@ model Document {
   uploadedBy       User                     @relation(fields: [uploadedById], references: [id])
   uploadedById     String
   fileName         String
-  storagePath      String
+  storagePath      String? // مسار القرص المحلي القديم (للتوافق أثناء الترحيل)
+  storageKey       String? // مفتاح Cloudflare R2 (التخزين الدائم الجديد)
   category         String?
   visibilityLevel  DocumentVisibility       @default(case_team)
   version          Int                      @default(1)
@@ -908,7 +909,8 @@ model IntakeDocument {
   intake       IntakeRequest @relation(fields: [intakeId], references: [id])
   intakeId     String
   title        String
-  storagePath  String
+  storagePath  String? // مسار القرص المحلي القديم (للتوافق أثناء الترحيل)
+  storageKey   String? // مفتاح Cloudflare R2
   uploadedBy   User          @relation(fields: [uploadedById], references: [id])
   uploadedById String
   createdAt    DateTime      @default(now())
@@ -1289,7 +1291,8 @@ model ServiceDocument {
   service      LegalService @relation(fields: [serviceId], references: [id])
   serviceId    String
   title        String
-  storagePath  String
+  storagePath  String? // مسار القرص المحلي القديم (للتوافق أثناء الترحيل)
+  storageKey   String? // مفتاح Cloudflare R2
   uploadedBy   User         @relation(fields: [uploadedById], references: [id])
   uploadedById String
   createdAt    DateTime     @default(now())

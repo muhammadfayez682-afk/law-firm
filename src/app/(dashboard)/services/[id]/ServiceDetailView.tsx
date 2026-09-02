@@ -30,7 +30,7 @@ type ServiceData = {
   assignedTo: { fullName: string };
   createdBy: { fullName: string };
   notes: { id: string; content: string; authorName: string; createdAt: string }[];
-  documents: { id: string; title: string; storagePath: string; uploadedByName: string }[];
+  documents: { id: string; title: string; uploadedByName: string }[];
 };
 
 const STATUS_OPTIONS: ServiceStatus[] = ["new", "in_progress", "pending_client", "under_review", "completed", "cancelled"];
@@ -191,7 +191,7 @@ export function ServiceDetailView({
           <ul className="space-y-1.5 text-sm">
             {service.documents.map((d) => (
               <li key={d.id} className="flex items-center justify-between">
-                <a href={d.storagePath} target="_blank" rel="noopener noreferrer" className="text-taradhi hover:underline">{d.title}</a>
+                <a href={`/api/service-documents/${d.id}/download`} target="_blank" rel="noopener noreferrer" className="text-taradhi hover:underline">{d.title}</a>
                 <span className="text-xs text-foreground/50">{d.uploadedByName}</span>
               </li>
             ))}
