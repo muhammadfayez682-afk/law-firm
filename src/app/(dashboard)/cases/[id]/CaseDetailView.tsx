@@ -20,6 +20,7 @@ import type {
 import { CaseStatusBadge } from "@/components/cases/CaseStatusBadge";
 import { CaseTeamPanel } from "@/components/cases/CaseTeamPanel";
 import { CaseTimelinePanel, type TimelineEventView } from "@/components/cases/CaseTimelinePanel";
+import { CaseVerdictsPanel, type VerdictView } from "@/components/cases/CaseVerdictsPanel";
 import {
   CaseDelegationsPanel,
   type DelegationView,
@@ -164,6 +165,8 @@ export function CaseDetailView({
   timelineInfo,
   archiveInfo,
   reportBlock,
+  verdictInfo,
+  closureContext,
 }: {
   caseData: FullCase;
   reportBlock: { id: string; sessionDate: string; hijriDate: string | null } | null;
@@ -191,6 +194,15 @@ export function CaseDetailView({
     events: TimelineEventView[];
   };
   archiveInfo: ArchiveInfo;
+  verdictInfo: {
+    canWrite: boolean;
+    verdicts: VerdictView[];
+  };
+  closureContext: {
+    hasFinalBindingVerdict: boolean;
+    hasSettledSettlement: boolean;
+    appealDeadlineSet: boolean;
+  };
 }) {
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [reportForSession, setReportForSession] = useState<string | null>(null);
@@ -664,6 +676,13 @@ export function CaseDetailView({
         canManage={timelineInfo.canManage}
       />
 
+      <CaseVerdictsPanel
+        caseId={caseData.id}
+        verdicts={verdictInfo.verdicts}
+        canWrite={verdictInfo.canWrite}
+        appealDeadlineSet={closureContext.appealDeadlineSet}
+      />
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <section className="rounded-xl border border-black/5 bg-white p-5 shadow-sm">
@@ -873,7 +892,12 @@ export function CaseDetailView({
         <UploadDocumentModal caseId={caseData.id} onClose={() => setShowUploadModal(false)} />
       )}
       {showClosureModal && (
-        <CaseClosureModal caseId={caseData.id} onClose={() => setShowClosureModal(false)} />
+        <CaseClosureModal
+          caseId={caseData.id}
+          hasFinalBindingVerdict={closureContext.hasFinalBindingVerdict}
+          hasSettledSettlement={closureContext.hasSettledSettlement}
+          onClose={() => setShowClosureModal(false)}
+        />
       )}
       {showNewTask && (
         <NewTaskModal

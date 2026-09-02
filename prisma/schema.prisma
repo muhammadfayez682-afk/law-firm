@@ -68,6 +68,8 @@ model User {
   sessionReports          SessionReport[]
   archivedCases           Case[]                   @relation("CaseArchivedBy")
   deletedCases            Case[]                   @relation("CaseDeletedBy")
+  closedCases             Case[]                   @relation("CaseClosedBy")
+  verdicts                Verdict[]
   dashboardPreference     UserDashboardPreference?
 
   @@map("users")
@@ -206,6 +208,12 @@ model Case {
   closedDate             DateTime?
   appealDeadline         DateTime? // مهلة الاستئناف — آخر يوم للطعن (يدوي؛ يبرز عند الحكم الابتدائي)
   followUpDate           DateTime? // تاريخ المتابعة القادم (يدوي مستقل عن الجلسات)
+  // سبب الإغلاق المتعدد (يُحدَّد عند طلب الإغلاق، يُثبَّت عند الاعتماد)
+  closureReason          CaseClosureReason?
+  closureNote            String?                 @db.Text
+  closedBy               User?                   @relation("CaseClosedBy", fields: [closedById], references: [id])
+  closedById             String?
+  closedAt               DateTime?
   responsibleLawyer      User                    @relation("ResponsibleLawyer", fields: [responsibleLawyerId], references: [id])
   responsibleLawyerId    String
   createdBy              User?                   @relation("CaseCreator", fields: [createdById], references: [id])
@@ -238,6 +246,7 @@ model Case {
   filledTemplates        FilledTemplate[]
   closureRequest         CaseClosureRequest?
   reopenLogs             CaseReopenLog[]
+  verdicts               Verdict[]
   memos                  LegalMemo[]
   intakeRequest          IntakeRequest?           @relation("ActivatedCase")
   relatedIntakes         IntakeRequest[]          @relation("RelatedCase")
@@ -678,6 +687,55 @@ model CaseClosureRequest {
   @@map("case_closure_requests")
 }
 
+// ═══════════ الوحدة الختامية: صك الحكم + القطعية + سبب الإغلاق ═══════════
+
+enum VerdictDegree {
+  first_instance // ابتدائي
+  appeal // استئناف
+  supreme // عليا
+}
+
+enum VerdictResult {
+  in_favor // لصالحنا
+  against // ضدنا
+  partial // جزئي
+}
+
+enum VerdictFinality {
+  pending_finality // بانتظار اكتساب القطعية
+  final_binding // مكتسب القطعية
+}
+
+// سبب إغلاق القضية المتعدد (على مستوى القضية).
+enum CaseClosureReason {
+  verdict // حكم
+  settlement // صلح
+  withdrawal // تنازل
+  dismissal // شطب
+}
+
+model Verdict {
+  id            String          @id @default(uuid())
+  case          Case            @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  caseId        String
+  degree        VerdictDegree
+  result        VerdictResult
+  verdictNumber String // رقم الصك
+  verdictDate   DateTime // تاريخ الصك (ميلادي، يُعرض هجري)
+  ruling        String          @db.Text // منطوق الحكم
+  finality      VerdictFinality @default(pending_finality)
+  finalityConfirmedById String?
+  finalityConfirmedAt   DateTime?
+  attachmentKey String? // مفتاح R2 لمرفق الصك (اختياري)
+  createdBy     User            @relation(fields: [createdById], references: [id])
+  createdById   String
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([caseId, degree])
+  @@map("verdicts")
+}
+
 model CaseReopenLog {
   id           String   @id @default(uuid())
   case         Case     @relation(fields: [caseId], references: [id])
@@ -1105,6 +1163,12 @@ enum NotificationType {
   appeal_deadline_urgent // مهلة استئناف عاجلة (يوم واحد)
   appeal_deadline_missing // حكم ابتدائي بلا مهلة استئناف مسجّلة — سجّلها
   follow_up_reminder // تاريخ متابعة القضية يقترب
+
+  // الأحكام والإغلاق
+  verdict_recorded // سُجّل صك حكم على القضية
+  finality_suggested // فوات مهلة الاستئناف — الحكم مرشّح لاكتساب القطعية
+  finality_confirmed // تأكيد اكتساب الحكم القطعية
+  case_closed // أُغلقت القضية
 
   // الوكالات
   agency_expiring_soon

@@ -16,6 +16,7 @@ import { displayTaskStatus, getAssignableUsers } from "@/lib/tasks";
 import { canArchiveCase, canRestoreCase, checkDeleteEligibility } from "@/lib/caseArchive";
 import { ALL_DELEGATED_PERMISSIONS, DELEGATED_PERMISSION_LABELS_AR } from "@/lib/caseDelegation";
 import { findEarliestHeldSessionMissingReport } from "@/lib/sessionReport";
+import { canWriteVerdict } from "@/lib/verdicts";
 import { CaseDetailView } from "./CaseDetailView";
 
 export default async function CaseDetailPage({
@@ -69,6 +70,10 @@ export default async function CaseDetailPage({
       },
       timeline: {
         orderBy: { sequence: "asc" },
+        include: { createdBy: { select: { fullName: true } } },
+      },
+      verdicts: {
+        orderBy: [{ verdictDate: "asc" }, { createdAt: "asc" }],
         include: { createdBy: { select: { fullName: true } } },
       },
     },
@@ -163,6 +168,28 @@ export default async function CaseDetailPage({
     })),
   };
 
+  // ===== الأحكام + سياق الإغلاق =====
+  const verdictInfo = {
+    canWrite: canWriteVerdict(session.user, caseData),
+    verdicts: caseData.verdicts.map((v) => ({
+      id: v.id,
+      degree: v.degree,
+      result: v.result,
+      verdictNumber: v.verdictNumber,
+      verdictDate: v.verdictDate.toISOString(),
+      ruling: v.ruling,
+      finality: v.finality,
+      finalityConfirmedAt: v.finalityConfirmedAt?.toISOString() ?? null,
+      hasAttachment: Boolean(v.attachmentKey),
+      createdByName: v.createdBy.fullName,
+    })),
+  };
+  const closureContext = {
+    hasFinalBindingVerdict: caseData.verdicts.some((v) => v.finality === "final_binding"),
+    hasSettledSettlement: caseData.amicableSettlement?.outcome === "settled",
+    appealDeadlineSet: caseData.appealDeadline != null,
+  };
+
   const serializedCase = {
     ...caseData,
     claimValue: caseData.claimValue ? Number(caseData.claimValue) : null,
@@ -229,6 +256,8 @@ export default async function CaseDetailPage({
       delegationInfo={delegationInfo}
       timelineInfo={timelineInfo}
       archiveInfo={archiveInfo}
+      verdictInfo={verdictInfo}
+      closureContext={closureContext}
     />
   );
 }

@@ -20,6 +20,7 @@ export type SchedulerResults = {
   sessionMemoAlerts: number;
   appealDeadlineAlerts: number;
   followUpAlerts: number;
+  finalitySuggestions: number;
 };
 
 /**
@@ -77,6 +78,7 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
     sessionMemoAlerts: 0,
     appealDeadlineAlerts: 0,
     followUpAlerts: 0,
+    finalitySuggestions: 0,
   };
   const now = Date.now();
 
@@ -249,6 +251,32 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
         resourceType: "case",
       });
       if (sent) results.followUpAlerts++;
+    }
+  }
+
+  // ===== 3.هـ اقتراح القطعية: حكم ابتدائي بانتظار القطعية فاتت مهلة استئنافه =====
+  const finalityCandidates = await prisma.case.findMany({
+    where: {
+      status: { notIn: ["closed", "archived", "appealed"] },
+      appealDeadline: { not: null, lt: new Date(now) }, // فاتت المهلة
+      verdicts: { some: { degree: "first_instance", finality: "pending_finality" } },
+    },
+    include: { team: true, verdicts: { select: { finality: true } } },
+  });
+  for (const c of finalityCandidates) {
+    // لا اقتراح إن كان هناك بالفعل صك مكتسب القطعية.
+    if (c.verdicts.some((v) => v.finality === "final_binding")) continue;
+    const caseNo = c.displayNumber ?? c.internalNumber;
+    const recipients = new Set<string>([c.responsibleLawyerId, ...c.team.map((m) => m.userId)]);
+    for (const rid of recipients) {
+      const sent = await notifyOnce(rid, "finality_suggested", c.id, 7 * DAY, {
+        priority: "high",
+        title: "الحكم مرشّح لاكتساب القطعية",
+        message: `فاتت مهلة الاستئناف في القضية ${caseNo} — الحكم الابتدائي مرشّح لاكتساب القطعية. أكّدها لإتاحة الإغلاق بحكم.`,
+        actionUrl: `/cases/${c.id}`,
+        resourceType: "case",
+      });
+      if (sent) results.finalitySuggestions++;
     }
   }
 

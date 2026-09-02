@@ -5,12 +5,29 @@ import { prisma } from "@/lib/prisma";
 import { isSystemAdmin } from "@/lib/rbac";
 import {
   CASE_ACTIVE_STATUS_AFTER_REJECTION,
+  CASE_OUTCOME_LABELS_AR,
   canRequestCaseClosure,
   canTransitionToPendingClosure,
-  validateClosureRequestInput,
 } from "@/lib/caseClosure";
+import {
+  isCaseClosureReason,
+  closureRequirementError,
+  mapClosureReasonToOld,
+  type ClosureRequirementContext,
+} from "@/lib/verdicts";
 import { notify, notifyBulk } from "@/lib/notifications/send";
 import { getUserIdsByRoles } from "@/lib/notifications/recipients";
+
+/** سياق متطلّب الإغلاق من بيانات القضية (صكوك + تسوية). */
+function closureContext(caseData: {
+  verdicts: { finality: string }[];
+  amicableSettlement: { outcome: string } | null;
+}): ClosureRequirementContext {
+  return {
+    hasFinalBindingVerdict: caseData.verdicts.some((v) => v.finality === "final_binding"),
+    hasSettledSettlement: caseData.amicableSettlement?.outcome === "settled",
+  };
+}
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -24,7 +41,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const caseData = await prisma.case.findUnique({
     where: { id },
-    include: { team: true },
+    include: { team: true, verdicts: { select: { finality: true } }, amicableSettlement: { select: { outcome: true } } },
   });
 
   if (!caseData) {
@@ -46,9 +63,21 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const body = await request.json();
-  const validationError = validateClosureRequestInput(body);
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
+  // تحقق أساسي: النتيجة + سبب الإغلاق المتعدد + الملخص.
+  if (typeof body.outcome !== "string" || !(body.outcome in CASE_OUTCOME_LABELS_AR)) {
+    return NextResponse.json({ error: "نتيجة القضية مطلوبة" }, { status: 400 });
+  }
+  if (!isCaseClosureReason(body.closureReason)) {
+    return NextResponse.json({ error: "سبب الإغلاق مطلوب" }, { status: 400 });
+  }
+  const closureNote = typeof body.closureNotes === "string" ? body.closureNotes.trim() : "";
+  if (!closureNote) {
+    return NextResponse.json({ error: "ملخص النتيجة مطلوب" }, { status: 400 });
+  }
+  // متطلّب سبب الإغلاق (verdict يتطلب صكًا مكتسب القطعية، إلخ) — مفروض على الـ API.
+  const reqError = closureRequirementError(body.closureReason, closureNote, closureContext(caseData));
+  if (reqError) {
+    return NextResponse.json({ error: reqError }, { status: 400 });
   }
 
   const [closureRequest] = await prisma.$transaction([
@@ -56,8 +85,8 @@ export async function POST(request: NextRequest, { params }: Params) {
       where: { caseId: id },
       update: {
         outcome: body.outcome,
-        closureReason: body.closureReason,
-        closureNotes: body.closureNotes.trim(),
+        closureReason: mapClosureReasonToOld(body.closureReason),
+        closureNotes: closureNote,
         requestedById: session.user.id,
         requestedAt: new Date(),
         status: "pending_approval",
@@ -68,12 +97,15 @@ export async function POST(request: NextRequest, { params }: Params) {
       create: {
         caseId: id,
         outcome: body.outcome,
-        closureReason: body.closureReason,
-        closureNotes: body.closureNotes.trim(),
+        closureReason: mapClosureReasonToOld(body.closureReason),
+        closureNotes: closureNote,
         requestedById: session.user.id,
       },
     }),
-    prisma.case.update({ where: { id }, data: { status: "pending_closure" } }),
+    prisma.case.update({
+      where: { id },
+      data: { status: "pending_closure", closureReason: body.closureReason, closureNote },
+    }),
     prisma.auditLog.create({
       data: {
         userId: session.user.id,
@@ -113,7 +145,20 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   const closureRequest = await prisma.caseClosureRequest.findUnique({
     where: { caseId: id },
-    include: { case: { select: { title: true, internalNumber: true } } },
+    include: {
+      case: {
+        select: {
+          title: true,
+          internalNumber: true,
+          displayNumber: true,
+          responsibleLawyerId: true,
+          closureReason: true,
+          team: { select: { userId: true } },
+          verdicts: { select: { finality: true } },
+          amicableSettlement: { select: { outcome: true } },
+        },
+      },
+    },
   });
   if (!closureRequest || closureRequest.status !== "pending_approval") {
     return NextResponse.json({ error: "لا يوجد طلب إغلاق قيد الانتظار لهذه القضية" }, { status: 404 });
@@ -128,6 +173,16 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   if (action === "reject" && (typeof body.rejectionNote !== "string" || !body.rejectionNote.trim())) {
     return NextResponse.json({ error: "سبب الرفض مطلوب" }, { status: 400 });
+  }
+
+  // إعادة التحقق من متطلّب الإغلاق عند الاعتماد (قد يتغيّر الوضع بين الطلب والاعتماد).
+  if (action === "approve" && closureRequest.case.closureReason) {
+    const reqError = closureRequirementError(
+      closureRequest.case.closureReason,
+      closureRequest.closureNotes,
+      closureContext(closureRequest.case)
+    );
+    if (reqError) return NextResponse.json({ error: reqError }, { status: 400 });
   }
 
   const now = new Date();
@@ -149,7 +204,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       where: { id },
       data:
         action === "approve"
-          ? { status: "closed", closedDate: now, outcome: closureRequest.outcome }
+          ? { status: "closed", closedDate: now, outcome: closureRequest.outcome, closedById: session.user.id, closedAt: now }
           : { status: CASE_ACTIVE_STATUS_AFTER_REJECTION },
     }),
     prisma.auditLog.create({
@@ -175,6 +230,24 @@ export async function PATCH(request: NextRequest, { params }: Params) {
           : `رُفض طلب إغلاق القضية «${closureRequest.case.title}»: ${body.rejectionNote.trim()}`,
       actionUrl: `/cases/${id}`,
       resourceType: "Case",
+      resourceId: id,
+      triggeredById: session.user.id,
+    });
+  }
+
+  // إشعار فريق القضية بإغلاقها فعليًا.
+  if (action === "approve") {
+    const teamIds = [
+      closureRequest.case.responsibleLawyerId,
+      ...closureRequest.case.team.map((m) => m.userId),
+    ].filter((uid) => uid !== session.user.id && uid !== closureRequest.requestedById);
+    await notifyBulk(teamIds, {
+      type: "case_closed",
+      priority: "normal",
+      title: "أُغلقت القضية",
+      message: `أُغلقت القضية «${closureRequest.case.title}» (${closureRequest.case.displayNumber ?? closureRequest.case.internalNumber}).`,
+      actionUrl: `/cases/${id}`,
+      resourceType: "case",
       resourceId: id,
       triggeredById: session.user.id,
     });

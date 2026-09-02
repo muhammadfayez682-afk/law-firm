@@ -196,7 +196,7 @@ type DelegationForCheck = {
   expiresAt: Date;
 };
 
-type CasePermissionInput = {
+export type CasePermissionInput = {
   responsibleLawyerId: string;
   team: { userId: string }[];
   accessOverrides: { userId: string; accessType: "allow" | "deny" }[];

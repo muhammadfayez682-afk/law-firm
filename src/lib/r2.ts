@@ -50,7 +50,7 @@ function safeFileName(fileName: string): string {
  * بنية مفاتيح منظّمة لتجنّب التصادم وتسهيل التنظيم:
  * <scope>/<ownerId>/<uuid>-<filename>  — مثال: cases/<caseId>/<uuid>-عقد.pdf
  */
-export function buildDocumentKey(scope: "cases" | "intake" | "services" | "general", ownerId: string, fileName: string): string {
+export function buildDocumentKey(scope: "cases" | "intake" | "services" | "general" | "verdicts", ownerId: string, fileName: string): string {
   return `${scope}/${ownerId}/${randomUUID()}-${safeFileName(fileName)}`;
 }
 
