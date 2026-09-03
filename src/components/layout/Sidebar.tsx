@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { UserRole } from "@prisma/client";
 import { canManageInvoices, canManageUsers, canViewAuditLog, isManagement } from "@/lib/rbac";
 import { canViewRejectedBank } from "@/lib/intake";
+import { BRAND } from "@/lib/brand";
 import type { NavItem } from "@/types";
 
 type NavGroup = {
@@ -218,12 +220,16 @@ export function Sidebar({
     <aside className="hidden md:flex md:w-64 md:flex-col bg-navy text-white h-screen sticky top-0">
       <div className="px-6 py-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold font-amiri text-lg font-bold text-navy">
-            م
-          </div>
+          <Image
+            src={BRAND.logoDark}
+            alt={BRAND.name}
+            width={44}
+            height={44}
+            className="h-11 w-11 shrink-0 object-contain"
+          />
           <div>
-            <p className="font-amiri text-xl font-bold text-gold-light">ميزان</p>
-            <p className="text-[11px] text-white/50">قدوم الحقائق للمحاماة</p>
+            <p className="font-amiri text-xl font-bold text-gold-light">{BRAND.name}</p>
+            <p className="text-[11px] text-white/50">{BRAND.tagline}</p>
           </div>
         </div>
         <div className="mt-5 h-px w-full bg-gradient-to-l from-gold via-gold/40 to-transparent" />

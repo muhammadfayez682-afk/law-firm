@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { BRAND } from "@/lib/brand";
 import { NotificationBell } from "./NotificationBell";
 
 const PAGE_TITLES: { prefix: string; label: string }[] = [
@@ -14,9 +15,9 @@ const PAGE_TITLES: { prefix: string; label: string }[] = [
 ];
 
 function getPageTitle(pathname: string | null): string {
-  if (!pathname) return "ميزان";
+  if (!pathname) return BRAND.name;
   const match = PAGE_TITLES.find((p) => pathname.startsWith(p.prefix));
-  return match?.label ?? "ميزان";
+  return match?.label ?? BRAND.name;
 }
 
 export function TopBar({ fullName }: { fullName: string }) {

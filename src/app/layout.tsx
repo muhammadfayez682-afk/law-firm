@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Tajawal, Amiri } from "next/font/google";
 import { Toaster } from "react-hot-toast";
+import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 const tajawal = Tajawal({
@@ -16,8 +17,8 @@ const amiri = Amiri({
 });
 
 export const metadata: Metadata = {
-  title: "ميزان | إدارة مكتب المحاماة",
-  description: "نظام ميزان لإدارة أعمال شركة قدوم الحقائق للمحاماة والاستشارات القانونية",
+  title: `${BRAND.name} | ${BRAND.tagline}`,
+  description: `نظام إدارة أعمال ${BRAND.fullName}`,
 };
 
 export default function RootLayout({
