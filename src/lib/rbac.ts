@@ -1,5 +1,12 @@
 import type { Prisma, UserRole, DocumentVisibility, DelegatedPermission } from "@prisma/client";
 
+/**
+ * ⚠️ هذا الملف هو **المصدر الوحيد للتحكّم** في الصلاحيات (لا تعتمد على غيره).
+ * توجد نسخة **توثيقية للعرض فقط** في `src/lib/permissions-registry.ts` تُغذّي شاشة
+ * `/settings/permissions`؛ كل صلاحية هناك تشير لدالتها هنا في حقل `source`. عند تعديل
+ * أي دالة صلاحية هنا، حدّث السجل يدويًا ليبقى العرض مطابقًا (السجل لا يؤثّر على التحكّم).
+ */
+
 export const ROLE_LABELS_AR: Record<UserRole, string> = {
   system_admin: "مسؤول النظام",
   supervisor: "مشرف",

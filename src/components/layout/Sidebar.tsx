@@ -64,6 +64,7 @@ function buildNavGroups(role: UserRole): NavGroup[] {
   const adminItems: NavItem[] = [];
   if (canManageUsers(role)) {
     adminItems.push({ href: "/settings/users", label: "المستخدمون", icon: "users" });
+    adminItems.push({ href: "/settings/permissions", label: "مصفوفة الصلاحيات", icon: "audit" });
   }
   if (canViewAuditLog(role)) {
     adminItems.push({ href: "/audit", label: "سجل التدقيق", icon: "audit" });
