@@ -8,6 +8,7 @@ import {
   isValidNationalIdOrCr,
   isValidSaudiPhone,
   nationalIdOrCrError,
+  normalizeDigits,
   normalizeSaudiPhone,
   VALIDATION_MESSAGES,
 } from "@/lib/validators";
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
     ? normalizeSaudiPhone(body.phone.trim())
     : null;
   const nationalIdOrCr = typeof body.nationalIdOrCr === "string" && body.nationalIdOrCr.trim()
-    ? body.nationalIdOrCr.trim()
+    ? normalizeDigits(body.nationalIdOrCr)
     : null;
   const force = body.force === true;
 

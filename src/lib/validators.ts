@@ -6,7 +6,7 @@
  */
 export const VALIDATION_MESSAGES = {
   phone: "رقم الجوال يجب أن يكون 10 أرقام ويبدأ بـ 05 (مثال: 0501234567)",
-  nationalId: "رقم الهوية الوطنية يجب أن يبدأ بـ 1، والإقامة بـ 2 (10 أرقام)",
+  nationalId: "رقم الهوية يجب أن يبدأ بـ 1 (هوية) أو 2 (إقامة) ويتكوّن من 10 أرقام",
   commercialRegister: "السجل التجاري يتكون من 10 أرقام",
   agency: "رقم الوكالة يجب أن يكون بين 6 و15 رقمًا (كما في صك الوكالة من ناجز)",
 } as const;
@@ -16,6 +16,17 @@ export function nationalIdOrCrError(type: "individual" | "company"): string {
   return type === "individual"
     ? VALIDATION_MESSAGES.nationalId
     : VALIDATION_MESSAGES.commercialRegister;
+}
+
+/**
+ * تطبيع وقائي لأي حقل رقمي: يحوّل الأرقام العربية-الهندية (٠-٩) والفارسية (۰-۹)
+ * إلى إنجليزية (0-9) ويزيل المسافات المحيطة — قبل أي فحص صيغة.
+ */
+export function normalizeDigits(value: string): string {
+  return value
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .trim();
 }
 
 /**
@@ -43,7 +54,11 @@ export function saudiPhoneError(phone: string): string | null {
   return null;
 }
 
-/** الهوية الوطنية (تبدأ بـ 1) أو الإقامة (تبدأ بـ 2) — 10 أرقام + خوارزمية Luhn المعدّلة. */
+/**
+ * الهوية الوطنية (تبدأ بـ 1) أو الإقامة (تبدأ بـ 2) — 10 أرقام + خوارزمية Luhn المعدّلة.
+ * ⚠️ لم تعد مستخدمة لتحقق هوية الفرد (خُفِّف إلى بادئة+طول فقط في isValidNationalIdOrCr)
+ * — أُبقيت كأداة تحقق صارم اختياري إن لزم لاحقًا. لا تستدعِها لتحقق العميل/الطرف.
+ */
 export function isValidSaudiId(id: string): boolean {
   if (!/^[12]\d{9}$/.test(id)) return false;
   let sum = 0;
@@ -79,7 +94,9 @@ export function isValidInternalCaseNumber(num: string): boolean {
  * فرد → هوية/إقامة، شركة → سجل تجاري.
  */
 export function isValidNationalIdOrCr(value: string, type: "individual" | "company"): boolean {
-  return type === "individual" ? isValidSaudiId(value) : isValidCommercialRegister(value);
+  const v = normalizeDigits(value);
+  // الفرد: بادئة 1 (هوية) أو 2 (إقامة) + 10 أرقام فقط — بلا Luhn/checksum (تخفيف مقصود).
+  return type === "individual" ? /^[12]\d{9}$/.test(v) : isValidCommercialRegister(v);
 }
 
 /** أنواع الطرف المقابل — تحدّد قاعدة تحقق رقمه. */
@@ -97,7 +114,7 @@ export function isPartyType(v: unknown): v is PartyType {
  * - جهة حكومية: لا صيغة مفروضة إطلاقًا (النيابة/الوزارات قد لا يكون لها رقم بهذه الصيغة).
  */
 export function partyIdentityError(partyType: PartyType, value: string | null | undefined): string | null {
-  const v = (value ?? "").trim();
+  const v = normalizeDigits(value ?? "");
   if (partyType === "government") return null; // بلا تحقق صارم
   if (!v) return null; // اختياري
   if (partyType === "company") {

@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { caseVisibilityWhere, type SessionUser } from "@/lib/rbac";
+import { caseVisibilityWhere, clientVisibilityWhere, type SessionUser } from "@/lib/rbac";
 import { serviceVisibilityWhere, SERVICE_ACTIVE_STATUSES } from "@/lib/services";
 import { prepProgress, isCriticalPrepTask } from "@/lib/sessionPrep";
 
 const MS_DAY = 24 * 60 * 60 * 1000;
+const ACTIVE_EXCLUDED = ["closed", "archived"] as const;
 
 function dayBounds(now: Date) {
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -88,6 +89,148 @@ const SESSION_TYPE_LABELS_AR: Record<string, string> = {
   verdict: "نطق بالحكم",
   arbitration: "تحكيم",
 };
+
+export type DashboardCounts = {
+  // نظرة عامة (دائمة)
+  activeCases: number;
+  clients: number;
+  needsMyAction: number;
+  // يحتاج انتباهك (حرج)
+  noAgency: number; // قضايا نشطة بلا وكالة صادرة (pending_agency)
+  agenciesExpiring: number; // وكالات تنتهي خلال 30 يومًا
+  deadlinesSoon: number;
+  newIntakes: number;
+  pendingActivations: number;
+};
+
+// ══════════ مؤشرات شريط اللوحة (نظرة عامة + حرجة) — كلها مقيّدة بصلاحية المستخدم ══════════
+export async function getDashboardCounts(user: SessionUser): Promise<DashboardCounts> {
+  const now = new Date();
+  const in7 = new Date(now.getTime() + 7 * MS_DAY);
+  const in30 = new Date(now.getTime() + 30 * MS_DAY);
+  const caseWhere = caseVisibilityWhere(user);
+  const activeCaseWhere = { ...caseWhere, status: { notIn: [...ACTIVE_EXCLUDED] } };
+  // طابور الاستلام مجال إداري (ليس مقيّدًا بصلاحية القضية) — نحصره بمن يقرّر/يفعّل: مسؤول النظام/المشرف.
+  const canSeeIntakeQueue = user.role === "system_admin" || user.role === "supervisor";
+
+  const [
+    activeCases,
+    clients,
+    needsMyAction,
+    noAgency,
+    agenciesExpiring,
+    appealSoon,
+    followSoon,
+    sessionSoon,
+    newIntakes,
+    pendingActivations,
+  ] = await Promise.all([
+    prisma.case.count({ where: activeCaseWhere }),
+    prisma.client.count({ where: clientVisibilityWhere(user) }),
+    // «قضايا تحتاج إجرائي» = مهام المستخدم غير المكتملة المرتبطة بقضية مرئية.
+    prisma.task.count({
+      where: {
+        ...myTasksWhere(user.id),
+        cancelledAt: null,
+        status: { notIn: ["cancelled", "rejected", "completed"] },
+        case: { is: caseWhere },
+      },
+    }),
+    // قضايا نشطة بلا وكالة صادرة = الحالة pending_agency (نشطة والفريق يعمل، دون صدور الوكالة).
+    prisma.case.count({ where: { ...caseWhere, status: "pending_agency" } }),
+    // وكالات تنتهي خلال 30 يومًا — مقيّدة بعملاء يملك المستخدم رؤيتهم.
+    prisma.agency.count({ where: { expiryDate: { gte: now, lte: in30 }, client: clientVisibilityWhere(user) } }),
+    prisma.case.count({ where: { ...activeCaseWhere, appealDeadline: { gte: now, lte: in7 } } }),
+    prisma.case.count({ where: { ...activeCaseWhere, followUpDate: { gte: now, lte: in7 } } }),
+    prisma.session.count({ where: { case: caseWhere, status: "scheduled", sessionDate: { gte: now, lte: in7 } } }),
+    canSeeIntakeQueue
+      ? prisma.intakeRequest.count({ where: { status: { in: ["received", "conflict_check"] } } })
+      : Promise.resolve(0),
+    canSeeIntakeQueue
+      ? prisma.intakeRequest.count({ where: { status: "fee_agreement_pending" } })
+      : Promise.resolve(0),
+  ]);
+
+  return {
+    activeCases,
+    clients,
+    needsMyAction,
+    noAgency,
+    agenciesExpiring,
+    // مجموع المهل القريبة (استئناف + متابعة + جلسة خلال 7 أيام) — عدّ المناسبات لا القضايا المميّزة.
+    deadlinesSoon: appealSoon + followSoon + sessionSoon,
+    newIntakes,
+    pendingActivations,
+  };
+}
+
+export type ActiveCaseRow = {
+  id: string;
+  title: string;
+  number: string;
+  clientName: string;
+  court: string | null;
+  status: string; // CaseStatus — للوسم عبر CaseStatusBadge
+};
+
+// ══════════ القضايا النشطة (ودجت أساسي) — مقيّدة بصلاحية المستخدم ══════════
+export async function getActiveCasesWidget(user: SessionUser): Promise<ActiveCaseRow[]> {
+  const cases = await prisma.case.findMany({
+    where: { ...caseVisibilityWhere(user), status: { notIn: [...ACTIVE_EXCLUDED] } },
+    orderBy: { updatedAt: "desc" },
+    take: 6,
+    select: {
+      id: true,
+      title: true,
+      internalNumber: true,
+      displayNumber: true,
+      status: true,
+      courtName: true,
+      client: { select: { fullName: true } },
+    },
+  });
+  return cases.map((c) => ({
+    id: c.id,
+    title: c.title,
+    number: c.displayNumber ?? c.internalNumber,
+    clientName: c.client.fullName,
+    court: c.courtName,
+    status: c.status,
+  }));
+}
+
+export type PendingMemoRow = {
+  id: string;
+  title: string;
+  caseId: string;
+  caseNumber: string;
+  status: "draft" | "submitted" | "changes_requested";
+};
+
+// ══════════ المذكرات المعلّقة (ودجت أساسي جديد) — غير المعتمدة على قضايا المستخدم المرئية ══════════
+export async function getPendingMemos(user: SessionUser): Promise<PendingMemoRow[]> {
+  const memos = await prisma.legalMemo.findMany({
+    where: {
+      case: caseVisibilityWhere(user),
+      status: { in: ["draft", "submitted", "changes_requested"] },
+    },
+    orderBy: { updatedAt: "desc" },
+    take: 6,
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      case: { select: { id: true, internalNumber: true, displayNumber: true } },
+    },
+  });
+  return memos.map((m) => ({
+    id: m.id,
+    title: m.title,
+    caseId: m.case.id,
+    caseNumber: m.case.displayNumber ?? m.case.internalNumber,
+    status: m.status as PendingMemoRow["status"],
+  }));
+}
 
 export type MyTaskRow = {
   id: string;

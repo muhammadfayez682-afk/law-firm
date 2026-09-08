@@ -5,7 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { intakeVisibilityWhere } from "@/lib/intake";
 import { checkConflictOfInterest } from "@/lib/conflictCheck";
-import { isValidSaudiPhone, normalizeSaudiPhone, VALIDATION_MESSAGES } from "@/lib/validators";
+import { isValidSaudiPhone, normalizeSaudiPhone, normalizeDigits, VALIDATION_MESSAGES } from "@/lib/validators";
 import { checkIdentityDuplicate, checkPhoneDuplicate, duplicatePayload } from "@/lib/duplicateCheck";
 import { notifyBulk } from "@/lib/notifications/send";
 import { getUserIdsByRoles } from "@/lib/notifications/recipients";
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const clientName = typeof body.clientName === "string" ? body.clientName.trim() : "";
   const clientPhone = typeof body.clientPhone === "string" ? normalizeSaudiPhone(body.clientPhone.trim()) : "";
-  const clientIdNumber = typeof body.clientIdNumber === "string" ? body.clientIdNumber.trim() : "";
+  const clientIdNumber = typeof body.clientIdNumber === "string" ? normalizeDigits(body.clientIdNumber) : "";
   const disputeSummary = typeof body.disputeSummary === "string" ? body.disputeSummary.trim() : "";
   const opposingParty = typeof body.opposingParty === "string" ? body.opposingParty.trim() : "";
   const source = body.source as IntakeSource;

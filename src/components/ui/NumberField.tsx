@@ -15,7 +15,8 @@ const labelClass = "mb-1.5 block text-sm font-medium text-navy";
 function liveError(variant: Variant, value: string): string | null {
   if (!value) return null;
   if (variant === "phone") return saudiPhoneError(value);
-  if (variant === "saudi_id") return value.length !== 10 ? VALIDATION_MESSAGES.nationalId : null;
+  // مطابق للخادم: بادئة 1/2 + 10 أرقام بالضبط (بلا Luhn). القيمة أرقام إنجليزية فقط (يُنظّفها الحقل).
+  if (variant === "saudi_id") return /^[12]\d{9}$/.test(value) ? null : VALIDATION_MESSAGES.nationalId;
   if (variant === "cr") return value.length !== 10 ? VALIDATION_MESSAGES.commercialRegister : null;
   if (variant === "agency") return value.length < 6 ? VALIDATION_MESSAGES.agency : null;
   return null;
