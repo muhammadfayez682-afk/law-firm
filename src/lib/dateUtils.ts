@@ -69,3 +69,30 @@ export function getHijriMonthLabel(date: Date | string): string {
   const monthIndex = m.iMonth();
   return `${HIJRI_MONTH_NAMES_AR[monthIndex]} ${m.format("iYYYY")}هـ`;
 }
+
+const GREGORIAN_MONTH_NAMES_AR = [
+  "يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو",
+  "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر",
+];
+
+/** أسماء أيام الأسبوع مختصرة، تبدأ بالأحد (نمط التقويم السعودي). */
+export const WEEKDAY_SHORT_AR = ["أحد", "إثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"];
+
+/** اسم الشهر الميلادي بالعربي، مع سنته: «سبتمبر 2026م» (أرقام إنجليزية). */
+export function getGregorianMonthLabelAr(date: Date | string): string {
+  const m = moment(date);
+  return `${GREGORIAN_MONTH_NAMES_AR[m.month()]} ${m.format("YYYY")}م`;
+}
+
+/** تاريخ اليوم بالهجري: «17 رمضان 1447هـ» (أرقام إنجليزية). */
+export function getHijriDayLabel(date: Date | string): string {
+  const m = moment(date);
+  return `${m.format("iD")} ${HIJRI_MONTH_NAMES_AR[m.iMonth()]} ${m.format("iYYYY")}هـ`;
+}
+
+/** التاريخ الكامل بالصيغتين: «الأحد 17 رمضان 1447هـ (6 سبتمبر 2026م)». */
+export function getFullDualLabel(date: Date | string): string {
+  const m = moment(date);
+  const greg = `${m.format("D")} ${GREGORIAN_MONTH_NAMES_AR[m.month()]} ${m.format("YYYY")}م`;
+  return `${getDayNameAr(date)} ${getHijriDayLabel(date)} (${greg})`;
+}

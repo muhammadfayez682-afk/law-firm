@@ -57,7 +57,7 @@ function buildNavGroups(role: UserRole): NavGroup[] {
   if (canManageInvoices(role)) {
     groups.push({
       label: "المالية",
-      items: [{ href: "/invoices", label: "الفواتير والمصاريف", icon: "invoices" }],
+      items: [{ href: "/finance", label: "المركز المالي", icon: "invoices" }],
     });
   }
 

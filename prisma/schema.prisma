@@ -563,6 +563,9 @@ model Invoice {
   status    InvoiceStatus @default(due)
   issueDate DateTime      @default(now())
   dueDate   DateTime?
+  // السداد: إثبات الحوالة إلزامي عند التحديد كمدفوعة، وتاريخ السداد الفعلي (بدل الاعتماد على issueDate).
+  paidAt          DateTime?
+  paymentProofKey String? // مفتاح R2 لإثبات الحوالة (invoices/<invoiceId>/<uuid>-name)
 
   @@map("invoices")
 }

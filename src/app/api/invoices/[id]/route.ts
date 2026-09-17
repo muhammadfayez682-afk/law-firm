@@ -30,6 +30,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "حالة غير صالحة" }, { status: 400 });
   }
 
+  // إلزام إثبات الحوالة: لا يجوز التحديد كمدفوعة عبر هذا المسار — يمرّ السداد عبر POST /pay (رفع الحوالة).
+  if (body.status === "paid" && !existing.paymentProofKey) {
+    return NextResponse.json(
+      { error: "لا يمكن تحديد الفاتورة كمدفوعة دون رفع إثبات الحوالة (استخدم زر «تحديد كمدفوعة»)." },
+      { status: 400 }
+    );
+  }
+
   const updated = await prisma.invoice.update({
     where: { id },
     data: {

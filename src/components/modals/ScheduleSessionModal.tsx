@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { SessionMode, SessionPlatform, SessionType } from "@prisma/client";
 import { isJudicialHoliday, isWeekend } from "@/lib/judicialCalendar";
+import { HijriDateTimePicker } from "@/components/ui/HijriDateTimePicker";
 
 const PLATFORM_OPTIONS: { value: SessionPlatform; label: string }[] = [
   { value: "zoom", label: "Zoom" },
@@ -67,6 +68,12 @@ export function ScheduleSessionModal({
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+
+    if (!formData.get("sessionDate")) {
+      setError("اختر تاريخ الجلسة من التقويم.");
+      return;
+    }
+
     const meetingLink = (formData.get("meetingLink") as string)?.trim() || null;
 
     if (isRemote) {
@@ -172,14 +179,7 @@ export function ScheduleSessionModal({
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-navy">تاريخ ووقت الجلسة</label>
-            <input
-              name="sessionDate"
-              type="datetime-local"
-              required
-              onChange={(e) => onDateChange(e.target.value)}
-              className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold"
-              dir="ltr"
-            />
+            <HijriDateTimePicker name="sessionDate" onChange={(v) => onDateChange(v)} />
             {dateWarn && (
               <p className={`mt-1.5 rounded-lg px-3 py-2 text-xs font-medium ${dateWarn.kind === "holiday" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"}`}>
                 {dateWarn.text}
