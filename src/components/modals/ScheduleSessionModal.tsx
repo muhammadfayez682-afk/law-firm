@@ -129,8 +129,9 @@ export function ScheduleSessionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between">
+      <div className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        {/* الترويسة — ثابتة أعلى */}
+        <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-4">
           <h2 className="font-amiri text-xl font-bold text-navy">جدولة جلسة</h2>
           <button
             type="button"
@@ -142,7 +143,9 @@ export function ScheduleSessionModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          {/* المحتوى — قابل للتمرير داخليًا */}
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-navy">نوع الجلسة</label>
             <select
@@ -250,26 +253,30 @@ export function ScheduleSessionModal({
               ))}
             </select>
           </div>
+          </div>
+          {/* نهاية المحتوى القابل للتمرير */}
 
-          {error && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5"
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-taradhi px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
-            >
-              {loading ? "جارٍ الحفظ..." : "جدولة الجلسة"}
-            </button>
+          {/* الأزرار — ثابتة أسفل، دائمًا ظاهرة */}
+          <div className="shrink-0 border-t border-black/5 px-6 py-4">
+            {error && (
+              <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+            )}
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5"
+              >
+                إلغاء
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-taradhi px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+              >
+                {loading ? "جارٍ الحفظ..." : "جدولة الجلسة"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
