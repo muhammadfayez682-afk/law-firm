@@ -4,13 +4,13 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canEditCase } from "@/lib/rbac";
 import { notifyBulk } from "@/lib/notifications/send";
-import { attendingLawyerIds, SESSION_MEMO_REQUIRED_MESSAGE } from "@/lib/sessionMemo";
+import { attendingLawyerIds } from "@/lib/sessionMemo";
 
 type Params = { params: Promise<{ id: string }> };
 
 /**
  * تسجيل/تحديث محضر الجلسة (SessionMinutes) — محضر واحد لكل جلسة.
- * ⚠️ حفظ المحضر يسجّل الجلسة كـ«انعقدت»، ولا يُقبل دون ربط مذكرة (ولو مسودّة).
+ * حفظ المحضر يسجّل الجلسة كـ«انعقدت». ربط مذكرة اختياري — إن لم تُربط يُرسَل تذكير غير حاجب فقط.
  */
 export async function POST(request: NextRequest, { params }: Params) {
   const session = await getServerSession(authOptions);
@@ -50,21 +50,20 @@ export async function POST(request: NextRequest, { params }: Params) {
     effectiveMemoId = body.memoId;
   }
 
-  // ⚠️ الإلزام: حفظ المحضر يجعل الجلسة «منعقدة» — لا يُقبل دون مذكرة مرتبطة.
+  // ربط المذكرة اختياري: يُسمح بحفظ المحضر (وتسجيل الجلسة «منعقدة») دون مذكرة.
+  // إن لم تُربط مذكرة، نرسل تذكيرًا غير حاجب للمحامين الحاضرين (لا يمنع الحفظ).
   if (!effectiveMemoId) {
-    // تذكير المحامين الحاضرين بكتابة المذكرة.
     const recipients = attendingLawyerIds(existing.case).filter((uid) => uid !== session.user.id);
     await notifyBulk(recipients, {
       type: "session_memo_required",
-      priority: "high",
-      title: "مطلوب كتابة مذكرة الجلسة",
-      message: `الجلسة المنعقدة تحتاج ربط مذكرة قبل إغلاق محضرها.`,
+      priority: "normal",
+      title: "تذكير: مذكرة الجلسة",
+      message: `الجلسة المنعقدة بلا مذكرة مرتبطة — يُستحسن ربط مذكرة (اختياري).`,
       actionUrl: `/cases/${existing.caseId}`,
       resourceType: "session",
       resourceId: id,
       triggeredById: session.user.id,
     });
-    return NextResponse.json({ error: SESSION_MEMO_REQUIRED_MESSAGE }, { status: 400 });
   }
 
   const minutes = await prisma.sessionMinutes.upsert({

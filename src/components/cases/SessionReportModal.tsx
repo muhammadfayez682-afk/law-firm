@@ -116,10 +116,10 @@ export function SessionReportModal({ sessionId, onClose }: { sessionId: string; 
   return (
     <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"
+        className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="flex shrink-0 items-start justify-between gap-3 px-6 pt-6 pb-4">
           <div>
             <h2 className="font-amiri text-lg font-bold text-navy">تقرير الجلسة</h2>
             {ctx && <p className="text-xs text-foreground/50">{ctx.caseTitle} · {ctx.sessionTypeLabel} · {dualDate}</p>}
@@ -127,6 +127,7 @@ export function SessionReportModal({ sessionId, onClose }: { sessionId: string; 
           <button type="button" onClick={onClose} className="rounded-lg px-2 text-lg text-foreground/40 hover:text-navy">✕</button>
         </div>
 
+        <div className="flex-1 overflow-y-auto px-6 pb-4">
         {loading ? (
           <div className="h-40 animate-pulse rounded-xl bg-black/5" />
         ) : loadError ? (
@@ -195,24 +196,28 @@ export function SessionReportModal({ sessionId, onClose }: { sessionId: string; 
             {report && (
               <p className="mt-3 text-xs text-foreground/40">آخر تحديث: {report.createdByName}</p>
             )}
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5">
-                إغلاق
-              </button>
-              {canEdit && !blocked && (
-                <button
-                  type="button"
-                  onClick={save}
-                  disabled={saving || !summary.trim()}
-                  className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60"
-                >
-                  {saving ? "جارٍ الحفظ..." : report ? "حفظ التعديل" : "حفظ التقرير"}
-                </button>
-              )}
-            </div>
           </>
         ) : null}
+        </div>
+        {/* نهاية المحتوى القابل للتمرير */}
+
+        {!loading && !loadError && ctx && (
+          <div className="flex shrink-0 justify-end gap-2 border-t border-black/5 px-6 py-4">
+            <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5">
+              إغلاق
+            </button>
+            {canEdit && !blocked && (
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving || !summary.trim()}
+                className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60"
+              >
+                {saving ? "جارٍ الحفظ..." : report ? "حفظ التعديل" : "حفظ التقرير"}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

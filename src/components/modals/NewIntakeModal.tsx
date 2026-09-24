@@ -181,13 +181,14 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between">
+      <div className="flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-4">
           <h2 className="font-amiri text-xl font-bold text-navy">طلب استلام جديد</h2>
           <button type="button" onClick={onClose} className="text-foreground/40 hover:text-foreground">✕</button>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate className="space-y-6">
+        <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 space-y-6 overflow-y-auto px-6 pb-4">
           {/* الخطوة 1: نوع الطلب */}
           <section>
             <h3 className={sectionTitleClass}>1. نوع الطلب</h3>
@@ -417,15 +418,19 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
             </div>
           </section>
 
-          {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+          </div>
+          {/* نهاية المحتوى القابل للتمرير */}
 
-          <div className="flex justify-end gap-3 border-t border-black/5 pt-4">
-            <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5">
-              إلغاء
-            </button>
-            <button type="submit" disabled={loading} className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60">
-              {loading ? "جارٍ الحفظ..." : "حفظ وفحص التعارض"}
-            </button>
+          <div className="shrink-0 border-t border-black/5 px-6 py-4">
+            {error && <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+            <div className="flex justify-end gap-3">
+              <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5">
+                إلغاء
+              </button>
+              <button type="submit" disabled={loading} className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60">
+                {loading ? "جارٍ الحفظ..." : "حفظ وفحص التعارض"}
+              </button>
+            </div>
           </div>
         </form>
       </div>

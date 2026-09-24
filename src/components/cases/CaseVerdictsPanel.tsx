@@ -193,12 +193,13 @@ function AddVerdictModal({
 
   return (
     <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
+      <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-4">
           <h2 className="font-amiri text-lg font-bold text-navy">تسجيل صك حكم</h2>
           <button type="button" onClick={onClose} className="text-lg text-foreground/40 hover:text-navy">✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={label}>الدرجة <span className="text-red-600">*</span></label>
@@ -231,7 +232,10 @@ function AddVerdictModal({
             <label className={label}>مرفق الصك (اختياري)</label>
             <input name="attachment" type="file" className="w-full text-sm" />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          </div>
+          {/* نهاية المحتوى القابل للتمرير */}
+
+          <div className="flex shrink-0 justify-end gap-2 border-t border-black/5 px-6 py-4">
             <button type="button" onClick={onClose} className="rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-navy hover:bg-black/5">إلغاء</button>
             <button type="submit" disabled={saving} className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60">
               {saving ? "جارٍ الحفظ..." : "تسجيل الصك"}

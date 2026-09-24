@@ -95,15 +95,16 @@ export function NewTaskModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between">
+      <div className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-4">
           <h2 className="font-amiri text-xl font-bold text-navy">مهمة جديدة</h2>
           <button type="button" onClick={onClose} className="text-foreground/40 hover:text-foreground">
             ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 space-y-4 overflow-y-auto px-6 pb-4">
           <div>
             <label className={labelClass}>
               عنوان المهمة <span className="text-red-600">*</span>
@@ -228,7 +229,10 @@ export function NewTaskModal({
             <input name="dueDate" type="date" className={inputClass} dir="ltr" />
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-black/5 pt-4">
+          </div>
+          {/* نهاية المحتوى القابل للتمرير */}
+
+          <div className="flex shrink-0 justify-end gap-3 border-t border-black/5 px-6 py-4">
             <button
               type="button"
               onClick={onClose}

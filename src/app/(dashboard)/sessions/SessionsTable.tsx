@@ -176,15 +176,9 @@ function RecordMinutesModal({
     return () => { active = false; };
   }, [session.caseId]);
 
-  const hasMemo = Boolean(selectedMemoId || session.memoId);
-
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!content.trim()) return;
-    if (!hasMemo) {
-      toast.error("اربط مذكرة أو اكتب مذكرة جديدة قبل حفظ المحضر.");
-      return;
-    }
     setLoading(true);
     try {
       const res = await fetch(`/api/sessions/${session.id}/minutes`, {
@@ -223,17 +217,17 @@ function RecordMinutesModal({
             placeholder="اكتب وقائع الجلسة، ما تم، والقرارات..."
             className="w-full rounded-lg border border-black/10 px-3 py-2 text-sm outline-none focus:border-gold"
           />
-          {/* مذكرة الجلسة الإلزامية */}
-          <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+          {/* مذكرة الجلسة (اختيارية) */}
+          <div className="rounded-lg border border-black/10 bg-black/[0.02] p-3">
             <label className="mb-1.5 block text-sm font-medium text-navy">
-              مذكرة الجلسة <span className="text-red-600">*</span>
+              مذكرة الجلسة <span className="text-xs font-normal text-foreground/50">(اختياري)</span>
             </label>
             <select
               value={selectedMemoId}
               onChange={(e) => setSelectedMemoId(e.target.value)}
               className="w-full rounded-lg border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-gold"
             >
-              <option value="">— اختر مذكرة موجودة —</option>
+              <option value="">— بدون مذكرة —</option>
               {memos.map((m) => (
                 <option key={m.id} value={m.id}>{m.title}</option>
               ))}
@@ -244,11 +238,9 @@ function RecordMinutesModal({
             >
               ✍️ كتابة مذكرة جديدة مرتبطة بالجلسة
             </a>
-            {!hasMemo && (
-              <p className="mt-1.5 text-xs text-amber-800">
-                لا يمكن إغلاق محضر جلسة منعقدة دون ربط مذكرة (ولو مسودّة).
-              </p>
-            )}
+            <p className="mt-1.5 text-xs text-foreground/50">
+              يمكنك ربط مذكرة الآن أو لاحقًا — غير إلزامي لحفظ المحضر.
+            </p>
           </div>
           <p className="text-xs text-foreground/50">
             حفظ المحضر يسجّل الجلسة كـ«انعقدت» تلقائيًا.
@@ -263,8 +255,7 @@ function RecordMinutesModal({
             </button>
             <button
               type="submit"
-              disabled={loading || !content.trim() || !hasMemo}
-              title={!hasMemo ? "اربط مذكرة أولًا" : undefined}
+              disabled={loading || !content.trim()}
               className="rounded-lg bg-navy px-5 py-2 text-sm font-semibold text-white hover:bg-navy-light disabled:opacity-60"
             >
               {loading ? "جارٍ الحفظ..." : "حفظ المحضر"}
