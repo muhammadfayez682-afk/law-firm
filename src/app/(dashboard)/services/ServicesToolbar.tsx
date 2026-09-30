@@ -65,7 +65,7 @@ export function ServicesToolbar({
           onClick={() => setShowNew(true)}
           className="ms-auto rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-light"
         >
-          + خدمة جديدة
+          + دراسة جديدة
         </button>
       )}
 

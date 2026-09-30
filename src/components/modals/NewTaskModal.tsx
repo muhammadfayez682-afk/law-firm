@@ -212,9 +212,9 @@ export function NewTaskModal({
 
           {!presetServiceId && services.length > 0 && (
             <div>
-              <label className={labelClass}>ربط بخدمة قانونية</label>
+              <label className={labelClass}>ربط بدراسة قانونية</label>
               <select name="serviceId" defaultValue="" className={inputClass}>
-                <option value="">بدون خدمة</option>
+                <option value="">بدون دراسة</option>
                 {services.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.serviceNumber} — {s.title}

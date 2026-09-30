@@ -965,9 +965,9 @@ function ActivateModal({
       });
       const d = await res.json().catch(() => null);
       if (!res.ok) { toast.error(d?.error ?? "تعذّر التفعيل."); return; }
-      // طلب خدمة → تُنشأ خدمة قانونية بدل قضية.
+      // طلب دراسة → تُنشأ دراسة قانونية بدل قضية.
       if (d.kind === "service") {
-        toast.success(`أُنشئت الخدمة ${d.serviceNumber}`);
+        toast.success(`أُنشئت الدراسة ${d.serviceNumber}`);
         router.push(`/services/${d.serviceId}`);
         router.refresh();
         return;

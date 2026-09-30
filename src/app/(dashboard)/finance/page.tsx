@@ -76,7 +76,7 @@ export default async function FinancePage() {
   const services = servicesRaw.map((s) => ({
     id: s.id,
     title: s.title,
-    clientName: s.client.fullName,
+    clientName: s.client?.fullName ?? "بدون عميل",
     fee: s.fee != null ? Number(s.fee) : 0,
     statusLabel: SERVICE_STATUS_LABELS_AR[s.status] ?? s.status,
     isCompleted: s.status === "completed",

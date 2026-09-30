@@ -15,7 +15,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const doc = await prisma.serviceDocument.findUnique({
     where: { id },
-    include: { service: true },
+    include: { service: { include: { team: { select: { userId: true } } } } },
   });
   if (!doc) return NextResponse.json({ error: "المستند غير موجود" }, { status: 404 });
   if (!canAccessService(session.user, doc.service)) {

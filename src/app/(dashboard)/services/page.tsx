@@ -49,8 +49,8 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-amiri text-2xl font-bold text-navy">الخدمات القانونية</h1>
-          <p className="text-sm text-foreground/60">{services.length} خدمة</p>
+          <h1 className="font-amiri text-2xl font-bold text-navy">الدراسات القانونية</h1>
+          <p className="text-sm text-foreground/60">{services.length} دراسة</p>
         </div>
       </div>
 
@@ -62,7 +62,7 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
           <span>العنوان</span>
           <span>النوع</span>
           <span>العميل</span>
-          <span>المسؤول</span>
+          <span>المحامي الرئيسي</span>
           <span>الحالة</span>
         </div>
         <div className="divide-y divide-black/5">
@@ -75,7 +75,7 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
               <span className="font-mono text-xs text-navy" dir="ltr">{s.serviceNumber}</span>
               <span className="truncate font-medium text-navy">{s.title}</span>
               <span className="text-foreground/70">{SERVICE_TYPE_LABELS_AR[s.serviceType]}</span>
-              <span className="truncate text-foreground/70">{s.client.fullName}</span>
+              <span className="truncate text-foreground/70">{s.client?.fullName ?? "—"}</span>
               <span className="truncate text-foreground/70">{s.assignedTo.fullName}</span>
               <span>
                 <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${SERVICE_STATUS_STYLES[s.status]}`}>
@@ -85,7 +85,7 @@ export default async function ServicesPage({ searchParams }: { searchParams: Pro
             </Link>
           ))}
           {services.length === 0 && (
-            <div className="px-5 py-10 text-center text-foreground/50">لا توجد خدمات مطابقة</div>
+            <div className="px-5 py-10 text-center text-foreground/50">لا توجد دراسات مطابقة</div>
           )}
         </div>
       </div>

@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const { id } = await params;
   const service = await prisma.legalService.findUnique({
     where: { id },
-    select: { id: true, assignedToId: true, createdById: true },
+    select: { id: true, assignedToId: true, createdById: true, team: { select: { userId: true } } },
   });
   if (!service) return NextResponse.json({ error: "الخدمة غير موجودة" }, { status: 404 });
   if (!canAccessService(session.user, service)) {

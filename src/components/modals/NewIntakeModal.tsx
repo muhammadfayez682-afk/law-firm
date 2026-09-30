@@ -156,7 +156,7 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
     if (saudiPhoneError(clientPhone)) return setError(VALIDATION_MESSAGES.phone);
     if (clientIdNumber && clientIdNumber.length !== 10) return setError(VALIDATION_MESSAGES.nationalId);
     if (disputeSummary.length < 30) {
-      return setError(isService ? "وصف الخدمة يجب ألا يقل عن 30 حرفًا" : "ملخص النزاع يجب ألا يقل عن 30 حرفًا");
+      return setError(isService ? "وصف الدراسة يجب ألا يقل عن 30 حرفًا" : "ملخص النزاع يجب ألا يقل عن 30 حرفًا");
     }
     if (!isService && !String(formData.get("opposingParty") || "").trim()) {
       return setError("الطرف المقابل مطلوب لفحص التعارض");
@@ -195,7 +195,7 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
             <div className="flex gap-2">
               {([
                 { v: "case", l: "⚖️ قضية" },
-                { v: "service", l: "📄 خدمة قانونية" },
+                { v: "service", l: "📄 دراسة قانونية" },
               ] as const).map((o) => (
                 <button
                   key={o.v}
@@ -253,7 +253,7 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
                             {c.phone ?? "—"} · {c.nationalIdOrCr ?? "—"}
                           </span>
                           <span className="block text-xs text-foreground/50">
-                            قضايا نشطة: {c.activeCases.length} · خدمات: {c.services.length}
+                            قضايا نشطة: {c.activeCases.length} · دراسات: {c.services.length}
                           </span>
                         </button>
                       </li>
@@ -289,7 +289,7 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
                 )}
                 {selectedClient.services.length > 0 && (
                   <div className="mt-2">
-                    <p className="mb-1 text-xs font-medium text-navy">الخدمات السابقة:</p>
+                    <p className="mb-1 text-xs font-medium text-navy">الدراسات السابقة:</p>
                     <ul className="space-y-0.5 text-xs text-foreground/70">
                       {selectedClient.services.map((s) => (
                         <li key={s.id}>• {s.serviceNumber} — {s.title}</li>
@@ -365,7 +365,7 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
           </section>
 
           <section>
-            <h3 className={sectionTitleClass}>{requestKind === "service" ? "تفاصيل الخدمة المطلوبة" : "بيانات النزاع"}</h3>
+            <h3 className={sectionTitleClass}>{requestKind === "service" ? "تفاصيل الدراسة المطلوبة" : "بيانات النزاع"}</h3>
             <div className="space-y-4">
               <div>
                 <DefinedField definitionKey="dispute_summary" required htmlFor="disputeSummary" />
@@ -382,7 +382,7 @@ export function NewIntakeModal({ onClose }: { onClose: () => void }) {
                 <div>
                   {requestKind === "service" ? (
                     <>
-                      <label className={labelClass}>نوع الخدمة المقترح</label>
+                      <label className={labelClass}>نوع الدراسة المقترح</label>
                       <select name="proposedServiceType" defaultValue="legal_consultation" className={inputClass}>
                         {Object.entries(SERVICE_TYPE_LABELS_AR).map(([v, l]) => (
                           <option key={v} value={v as ServiceType}>{l}</option>

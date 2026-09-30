@@ -62,6 +62,7 @@ model User {
   taskAssignments         TaskAssignee[]
   assignedServices        LegalService[]           @relation("ServiceAssignee")
   createdServices         LegalService[]           @relation("ServiceCreator")
+  serviceTeamMemberships  ServiceTeamMember[]
   serviceDocuments        ServiceDocument[]
   serviceNotes            ServiceNote[]
   completedPrepTasks      SessionPreparationTask[]
@@ -1315,6 +1316,27 @@ enum ServicePriority {
   urgent
 }
 
+// دور عضو فريق الدراسة القانونية — رئيسي (المحامي الرئيسي) أو مشارك.
+enum ServiceTeamRole {
+  lead // المحامي الرئيسي
+  co // مشارك
+}
+
+// عضو فريق الدراسة القانونية (نمط مبسّط من CaseTeamMember: دوران فقط).
+model ServiceTeamMember {
+  id            String          @id @default(uuid())
+  service       LegalService    @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId     String
+  user          User            @relation(fields: [userId], references: [id])
+  userId        String
+  roleInService ServiceTeamRole
+  assignedAt    DateTime        @default(now())
+
+  @@unique([serviceId, userId])
+  @@index([userId])
+  @@map("service_team_members")
+}
+
 model LegalService {
   id            String          @id @default(uuid())
   serviceNumber String          @unique // SRV-2026-0001
@@ -1322,8 +1344,9 @@ model LegalService {
   serviceType   ServiceType
   description   String          @db.Text
 
-  client   Client @relation(fields: [clientId], references: [id])
-  clientId String
+  // العميل اختياري: قد تُنشأ دراسة قانونية دون ربطها بعميل.
+  client   Client? @relation(fields: [clientId], references: [id])
+  clientId String?
 
   status   ServiceStatus   @default(new)
   priority ServicePriority @default(normal)
@@ -1347,6 +1370,7 @@ model LegalService {
   documents ServiceDocument[]
   notes     ServiceNote[]
   tasks     Task[]
+  team      ServiceTeamMember[]
 
   @@index([assignedToId, status])
   @@index([clientId])

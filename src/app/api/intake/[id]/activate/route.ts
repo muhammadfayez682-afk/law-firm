@@ -94,6 +94,11 @@ export async function POST(request: NextRequest, { params }: Params) {
           },
         });
 
+        // فريق الدراسة: المحامي المسؤول يصبح المحامي الرئيسي (lead) — مزامنة مع assignedToId.
+        await tx.serviceTeamMember.create({
+          data: { serviceId: created.id, userId: responsibleLawyerId, roleInService: "lead" },
+        });
+
         // نقل مستندات الاستلام إلى مستندات الخدمة.
         for (const doc of intake.documents) {
           await tx.serviceDocument.create({

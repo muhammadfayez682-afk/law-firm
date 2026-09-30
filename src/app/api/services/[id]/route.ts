@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth/next";
 import type { Prisma, ServicePriority, ServiceStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canAccessService, canEditService, canManageServiceFee } from "@/lib/services";
+import { buildServiceTeamRows, canAccessService, canEditService, canManageServiceFee } from "@/lib/services";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -21,6 +21,7 @@ export async function GET(_request: NextRequest, { params }: Params) {
       client: true,
       assignedTo: { select: { fullName: true } },
       createdBy: { select: { fullName: true } },
+      team: { include: { user: { select: { id: true, fullName: true } } } },
       notes: { include: { author: { select: { fullName: true } } }, orderBy: { createdAt: "desc" } },
       documents: { include: { uploadedBy: { select: { fullName: true } } }, orderBy: { createdAt: "desc" } },
     },
@@ -65,6 +66,41 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       data.status = body.status;
       if (body.status === "completed") data.completedAt = new Date();
     }
+  }
+
+  // تعديل الفريق (إعادة إسناد): محامٍ رئيسي + مشاركون — يخضع لصلاحية إدارة الدراسة (editable).
+  const wantsTeamEdit = editable && (body.leadLawyerId !== undefined || body.coLawyerIds !== undefined);
+  if (wantsTeamEdit) {
+    const newLeadId =
+      (typeof body.leadLawyerId === "string" && body.leadLawyerId) || service.assignedToId;
+    const lead = await prisma.user.findUnique({ where: { id: newLeadId }, select: { id: true, isActive: true } });
+    if (!lead || !lead.isActive) return NextResponse.json({ error: "المحامي الرئيسي غير صالح" }, { status: 400 });
+
+    const coLawyerIds: string[] = Array.isArray(body.coLawyerIds)
+      ? body.coLawyerIds.filter((x: unknown): x is string => typeof x === "string")
+      : [];
+    const validCoIds =
+      coLawyerIds.length > 0
+        ? (await prisma.user.findMany({ where: { id: { in: coLawyerIds }, isActive: true }, select: { id: true } })).map((u) => u.id)
+        : [];
+    const teamRows = buildServiceTeamRows(newLeadId, validCoIds);
+
+    // المحامي الرئيسي يُزامَن مع assignedToId.
+    data.assignedTo = { connect: { id: newLeadId } };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.serviceTeamMember.deleteMany({ where: { serviceId: id } });
+      await tx.serviceTeamMember.createMany({
+        data: teamRows.map((r) => ({ serviceId: id, userId: r.userId, roleInService: r.roleInService })),
+      });
+      await tx.legalService.update({ where: { id }, data });
+    });
+
+    await prisma.auditLog.create({
+      data: { userId: session.user.id, action: "update", resourceType: "LegalService", resourceId: id },
+    });
+    const refreshed = await prisma.legalService.findUnique({ where: { id } });
+    return NextResponse.json(refreshed);
   }
 
   const updated = await prisma.legalService.update({ where: { id }, data });

@@ -428,7 +428,7 @@ export async function getLawyerDashboard(user: SessionUser) {
       id: s.id,
       title: s.title,
       number: s.serviceNumber,
-      clientName: s.client.fullName,
+      clientName: s.client?.fullName ?? "بدون عميل",
       status: s.status,
     })),
     stats: { myCasesCount, myServicesCount, memosThisMonth },

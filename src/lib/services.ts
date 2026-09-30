@@ -1,5 +1,22 @@
-import type { Prisma, ServicePriority, ServiceStatus, ServiceType, UserRole } from "@prisma/client";
+import type { Prisma, ServicePriority, ServiceStatus, ServiceTeamRole, ServiceType, UserRole } from "@prisma/client";
 import type { SessionUser } from "@/lib/rbac";
+
+export const SERVICE_TEAM_ROLE_LABELS_AR: Record<ServiceTeamRole, string> = {
+  lead: "المحامي الرئيسي",
+  co: "محامٍ مشارك",
+};
+
+/** يبني صفوف فريق الدراسة: محامٍ رئيسي واحد + مشاركون (بلا تكرار، والرئيسي مستبعد من المشاركين). */
+export function buildServiceTeamRows(
+  leadId: string,
+  coIds: string[]
+): { userId: string; roleInService: ServiceTeamRole }[] {
+  const cos = [...new Set(coIds.filter((x) => x && x !== leadId))];
+  return [
+    { userId: leadId, roleInService: "lead" },
+    ...cos.map((userId) => ({ userId, roleInService: "co" as ServiceTeamRole })),
+  ];
+}
 
 export const SERVICE_TYPE_LABELS_AR: Record<ServiceType, string> = {
   legal_consultation: "استشارة قانونية",
@@ -36,17 +53,28 @@ export const SERVICE_PRIORITY_LABELS_AR: Record<ServicePriority, string> = {
 
 export const SERVICE_ACTIVE_STATUSES: ServiceStatus[] = ["new", "in_progress", "pending_client", "under_review"];
 
-type ServiceAccessInput = { assignedToId: string; createdById: string };
+type ServiceAccessInput = {
+  assignedToId: string;
+  createdById: string;
+  team?: { userId: string }[];
+};
 
-/** الإدارة/السكرتارية/المحاسب يرون كل الخدمات؛ المحامي/الباحث يرون خدماتهم فقط. */
+/** الإدارة/السكرتارية/المحاسب يرون كل الدراسات؛ المحامي/الباحث يرون دراساتهم فقط (رئيسي/مشارك/منشئ). */
 export function serviceVisibilityWhere(user: SessionUser): Prisma.LegalServiceWhereInput {
   if (["system_admin", "supervisor", "secretary", "accountant"].includes(user.role)) return {};
-  return { OR: [{ assignedToId: user.id }, { createdById: user.id }] };
+  return {
+    OR: [
+      { assignedToId: user.id },
+      { createdById: user.id },
+      { team: { some: { userId: user.id } } },
+    ],
+  };
 }
 
 export function canAccessService(user: SessionUser, service: ServiceAccessInput): boolean {
   if (["system_admin", "supervisor", "secretary", "accountant"].includes(user.role)) return true;
-  return service.assignedToId === user.id || service.createdById === user.id;
+  if (service.assignedToId === user.id || service.createdById === user.id) return true;
+  return service.team?.some((m) => m.userId === user.id) ?? false;
 }
 
 /** إنشاء الخدمات متاح للجميع عدا المحاسب. */

@@ -188,7 +188,7 @@ function otherItems(roleData: RoleData): OtherItem[] {
         { label: "مهام اليوم", value: d.alerts.tasksDueToday, href: "/tasks" },
         { label: "مذكرات بانتظار مراجعتك", value: d.alerts.memosAwaitingReview, href: "/memos?status=submitted" },
         { label: "مذكرات تعديلات", value: d.needsDecision.memosChangesRequested, href: "/memos" },
-        { label: "خدمات مراجعة", value: d.needsDecision.servicesUnderReview, href: "/services?status=under_review" },
+        { label: "دراسات مراجعة", value: d.needsDecision.servicesUnderReview, href: "/services?status=under_review" },
       ];
     }
     case "researcher": {
@@ -205,7 +205,7 @@ function otherItems(roleData: RoleData): OtherItem[] {
         { label: "إيرادات الشهر", value: d.finance.paidThisMonth, money: true },
         { label: "فواتير مستحقة", value: d.finance.dueTotal, money: true, href: "/invoices" },
         { label: "طلبات إغلاق", value: d.overview.pendingClosures, href: "/cases?status=pending_closure" },
-        { label: "خدمات متأخرة", value: d.health.overdueServices, href: "/services" },
+        { label: "دراسات متأخرة", value: d.health.overdueServices, href: "/services" },
         { label: "مهل تسوية", value: d.health.settlementSoon, href: "/cases" },
         { label: "تعارض مؤكد", value: d.overview.confirmedConflicts, href: "/intake" },
       ];
@@ -224,7 +224,7 @@ function otherItems(roleData: RoleData): OtherItem[] {
         { label: "فواتير متأخرة", value: d.overdueTotal, money: true, href: "/invoices" },
         { label: "تحصيلات الشهر", value: d.paidThisMonth, money: true },
         { label: "مصاريف الشهر", value: d.expensesThisMonth, money: true },
-        { label: "إيرادات الخدمات", value: d.serviceRevenue, money: true },
+        { label: "إيرادات الدراسات", value: d.serviceRevenue, money: true },
       ];
     }
   }
@@ -394,7 +394,7 @@ function RoleLists({ roleData }: { roleData: RoleData }) {
               {d.myCases.length === 0 && <p className="px-4 py-6 text-center text-sm text-foreground/50">لا توجد قضايا</p>}
             </ListCard>
 
-            <ListCard title="خدماتي النشطة" href="/services">
+            <ListCard title="دراساتي النشطة" href="/services">
               {d.myServices.map((s) => (
                 <Link key={s.id} href={`/services/${s.id}`} className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-navy/5">
                   <span className="min-w-0">
@@ -406,7 +406,7 @@ function RoleLists({ roleData }: { roleData: RoleData }) {
                   </span>
                 </Link>
               ))}
-              {d.myServices.length === 0 && <p className="px-4 py-6 text-center text-sm text-foreground/50">لا توجد خدمات</p>}
+              {d.myServices.length === 0 && <p className="px-4 py-6 text-center text-sm text-foreground/50">لا توجد دراسات</p>}
             </ListCard>
           </div>
         </div>
@@ -442,7 +442,7 @@ function RoleLists({ roleData }: { roleData: RoleData }) {
               ))}
               {d.myCases.length === 0 && <p className="px-4 py-6 text-center text-sm text-foreground/50">—</p>}
             </ListCard>
-            <ListCard title="خدمات أعمل عليها" href="/services">
+            <ListCard title="دراسات أعمل عليها" href="/services">
               {d.myServices.map((s) => (
                 <Link key={s.id} href={`/services/${s.id}`} className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-navy/5">
                   <span className="truncate font-medium text-navy">{s.title}</span>
@@ -501,7 +501,7 @@ function RoleLists({ roleData }: { roleData: RoleData }) {
           <p className="text-sm text-foreground/50">روابط سريعة</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <Link href="/invoices" className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy-light">الفواتير والمصاريف</Link>
-            <Link href="/services" className="rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5">الخدمات</Link>
+            <Link href="/services" className="rounded-lg border border-navy/20 px-4 py-2 text-sm font-medium text-navy hover:bg-navy/5">الدراسات</Link>
           </div>
         </div>
       );
