@@ -93,10 +93,13 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
   for (const s of upcomingSessions) {
     const untilMs = new Date(s.sessionDate).getTime() - now;
     const caseNo = s.case.displayNumber ?? s.case.internalNumber;
-    for (const m of s.case.team) {
+    // المستقبلون: المحامي المسؤول + فريق القضية (أسوةً ببقية الأقسام) — يضمن وصول
+    // التذكير للمحامي المسؤول حتى إن لم يكن ضمن صفوف الفريق.
+    const recipientIds = new Set<string>([s.case.responsibleLawyerId, ...s.case.team.map((m) => m.userId)]);
+    for (const rid of recipientIds) {
       if (untilMs <= HOUR + 10 * 60 * 1000) {
         // خلال ساعة تقريبًا
-        const sent = await notifyOnce(m.userId, "session_reminder_hour", s.id, 50 * 60 * 1000, {
+        const sent = await notifyOnce(rid, "session_reminder_hour", s.id, 50 * 60 * 1000, {
           priority: "urgent",
           title: "جلسة خلال ساعة",
           message: `جلسة في القضية ${caseNo} خلال ساعة تقريبًا.`,
@@ -105,7 +108,7 @@ export async function checkTimeSensitiveNotifications(): Promise<SchedulerResult
         });
         if (sent) results.sessionReminders++;
       } else if (untilMs >= 23 * HOUR && untilMs <= 25 * HOUR) {
-        const sent = await notifyOnce(m.userId, "session_reminder_day", s.id, 20 * HOUR, {
+        const sent = await notifyOnce(rid, "session_reminder_day", s.id, 20 * HOUR, {
           priority: "high",
           title: "جلسة غدًا",
           message: `جلسة في القضية ${caseNo} خلال 24 ساعة.`,
