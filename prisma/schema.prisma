@@ -71,6 +71,7 @@ model User {
   deletedCases            Case[]                   @relation("CaseDeletedBy")
   closedCases             Case[]                   @relation("CaseClosedBy")
   verdicts                Verdict[]
+  precedents              JudgmentPrecedent[]      @relation("PrecedentCreator")
   dashboardPreference     UserDashboardPreference?
 
   @@map("users")
@@ -738,6 +739,40 @@ model Verdict {
 
   @@index([caseId, degree])
   @@map("verdicts")
+}
+
+// مصدر السابقة في مدوّنة الأحكام: من قضايانا الداخلية أو سابقة خارجية منشورة.
+enum PrecedentSource {
+  internal
+  external
+}
+
+// مدوّنة الأحكام — بنك سوابق قضائية مكتبي مشترك (مرجع تعليمي، مستقل تمامًا عن Verdict/القضايا).
+// الرؤية بالدور (الطاقم القانوني) لا بـ ACL القضية — لتجنّب تسريب أحكام القضايا السرّية.
+model JudgmentPrecedent {
+  id              String          @id @default(uuid())
+  title           String // عنوان/موضوع السابقة
+  principle       String          @db.Text // المبدأ القانوني / الخلاصة (أهم حقل تعليمي)
+  fullText        String?         @db.Text // المنطوق/الحيثيات
+  court           String? // المحكمة (نص حر)
+  caseType        CaseType // التصنيف (إعادة استخدام enum القضية)
+  degree          VerdictDegree? // الدرجة (ابتدائي/استئناف/عليا)
+  result          VerdictResult? // النتيجة (اختياري)
+  judgmentNumber  String? // رقم الحكم
+  judgmentDate    DateTime? // تاريخ الحكم (يُعرض هجري)
+  keywords        String[] // وسوم للبحث
+  source          PrecedentSource @default(internal)
+  // حقول مرجعية اختيارية — بلا FK صارم لتجنّب الحذف المتسلسل من القضية/الصك.
+  sourceCaseId    String?
+  sourceVerdictId String?
+  attachmentKey   String? // مفتاح R2 لصك الحكم
+  createdBy       User            @relation("PrecedentCreator", fields: [createdById], references: [id])
+  createdById     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([caseType])
+  @@map("judgment_precedents")
 }
 
 model CaseReopenLog {

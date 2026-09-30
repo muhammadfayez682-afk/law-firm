@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import type { UserRole } from "@prisma/client";
 import { canManageInvoices, canManageUsers, canViewAuditLog, isManagement } from "@/lib/rbac";
 import { canViewRejectedBank } from "@/lib/intake";
+import { canViewPrecedents } from "@/lib/precedents";
 import { BRAND } from "@/lib/brand";
 import type { NavItem } from "@/types";
 
@@ -76,11 +77,12 @@ function buildNavGroups(role: UserRole): NavGroup[] {
     groups.push({ label: "الإدارة", items: adminItems });
   }
 
-  // مرجع المصطلحات القانونية — متاح للجميع.
-  groups.push({
-    label: "المرجع",
-    items: [{ href: "/glossary", label: "📖 قاموس المصطلحات", icon: "templates" }],
-  });
+  // المرجع: قاموس المصطلحات (للجميع) + مدوّنة الأحكام (للطاقم القانوني).
+  const referenceItems: NavItem[] = [{ href: "/glossary", label: "📖 قاموس المصطلحات", icon: "templates" }];
+  if (canViewPrecedents(role)) {
+    referenceItems.push({ href: "/precedents", label: "📚 مدوّنة الأحكام", icon: "templates" });
+  }
+  groups.push({ label: "المرجع", items: referenceItems });
 
   // متاح لكل المستخدمين لتغيير كلمة المرور وضبط تفضيلات الإشعارات.
   groups.push({
