@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canAccessCase, casePermissionInclude } from "@/lib/rbac";
 import {
   canWriteVerdict,
+  computeAppealDeadline,
   isVerdictDegree,
   isVerdictResult,
   VERDICT_DEGREE_LABELS_AR,
@@ -115,6 +116,15 @@ export async function POST(request: NextRequest, { params }: Params) {
   const degreeLabel = VERDICT_DEGREE_LABELS_AR[degree];
   const resultLabel = VERDICT_RESULT_LABELS_AR[result];
 
+  // عند الحكم الابتدائي: احسب مهلة الاستئناف تلقائيًا (إن لم تكن مُدخلة يدويًا)
+  // وانقل القضية لحالة «حكم ابتدائي» (ما لم تكن قد تجاوزتها بالفعل).
+  const autoAppealDeadline =
+    degree === "first_instance" && caseData.appealDeadline == null
+      ? computeAppealDeadline(caseData.caseType, verdictDate)
+      : null;
+  const STATUSES_AT_OR_AFTER_RULING = ["ruled_first_instance", "appealed", "pending_closure", "closed", "archived", "settled_amicably"];
+  const moveToRuled = degree === "first_instance" && !STATUSES_AT_OR_AFTER_RULING.includes(caseData.status);
+
   const verdict = await prisma.$transaction(async (tx) => {
     const created = await tx.verdict.create({
       data: {
@@ -148,6 +158,17 @@ export async function POST(request: NextRequest, { params }: Params) {
       },
     });
 
+    // ضبط مهلة الاستئناف + الحالة على القضية (ضمن نفس المعاملة).
+    if (autoAppealDeadline || moveToRuled) {
+      await tx.case.update({
+        where: { id },
+        data: {
+          ...(autoAppealDeadline ? { appealDeadline: autoAppealDeadline } : {}),
+          ...(moveToRuled ? { status: "ruled_first_instance" as const } : {}),
+        },
+      });
+    }
+
     await tx.auditLog.create({
       data: { userId: session.user.id, action: "create", resourceType: "Verdict", resourceId: created.id },
     });
@@ -170,8 +191,13 @@ export async function POST(request: NextRequest, { params }: Params) {
     triggeredById: session.user.id,
   });
 
-  // اقتراح إدخال مهلة الاستئناف عند حكم ابتدائي بلا مهلة مسجّلة.
-  const suggestAppealDeadline = degree === "first_instance" && caseData.appealDeadline == null;
-
-  return NextResponse.json({ verdict: serialize(verdict), suggestAppealDeadline }, { status: 201 });
+  return NextResponse.json(
+    {
+      verdict: serialize(verdict),
+      // مهلة الاستئناف المضبوطة تلقائيًا (ISO) أو null إن كانت مُدخلة يدويًا مسبقًا.
+      autoAppealDeadline: autoAppealDeadline?.toISOString() ?? null,
+      movedToRuled: moveToRuled,
+    },
+    { status: 201 }
+  );
 }

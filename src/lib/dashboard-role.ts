@@ -44,7 +44,9 @@ export async function getCriticalDates(user: SessionUser): Promise<CriticalDateI
       ...caseWhere,
       status: { notIn: ["closed", "archived"] },
       OR: [
-        { appealDeadline: { not: null, lte: horizon } },
+        // مهلة الاستئناف فترة حرجة ممتدة: تظهر طوال مدتها (قائمة أو فائتة) بلا سقف نافذة الـ30 يومًا.
+        { appealDeadline: { not: null } },
+        // المتابعات تبقى «قريبة فقط» ضمن النافذة.
         { followUpDate: { not: null, lte: horizon } },
         { status: "ruled_first_instance", appealDeadline: null },
       ],
@@ -64,7 +66,8 @@ export async function getCriticalDates(user: SessionUser): Promise<CriticalDateI
   const daysLeft = (d: Date) => Math.ceil((d.getTime() - now.getTime()) / MS_DAY);
   for (const c of cases) {
     const base = { caseId: c.id, caseTitle: c.title, caseNumber: c.displayNumber ?? c.internalNumber };
-    if (c.appealDeadline && c.appealDeadline <= horizon) {
+    if (c.appealDeadline) {
+      // تُعرض ما دامت قائمة (بلا سقف) وكذلك بعد فواتها — فوات مهلة الاستئناف حرج ولا يجوز أن تختفي.
       items.push({ id: `appeal:${c.id}`, ...base, kind: "appeal", date: c.appealDeadline.toISOString(), daysLeft: daysLeft(c.appealDeadline) });
     } else if (c.status === "ruled_first_instance" && !c.appealDeadline) {
       items.push({ id: `appeal_missing:${c.id}`, ...base, kind: "appeal_missing", date: null, daysLeft: null });

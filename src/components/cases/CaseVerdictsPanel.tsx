@@ -178,8 +178,8 @@ function AddVerdictModal({
         return;
       }
       toast.success("سُجّل صك الحكم");
-      if (d.suggestAppealDeadline && !appealDeadlineSet) {
-        toast("💡 أدخل مهلة الاستئناف من «تعديل البيانات» لتفعيل رصد القطعية.", { duration: 6000 });
+      if (d.autoAppealDeadline && !appealDeadlineSet) {
+        toast(`📅 ضُبطت مهلة الاستئناف تلقائيًا: ${formatDualDate(d.autoAppealDeadline)} — وانتقلت القضية إلى «حكم ابتدائي».`, { duration: 7000 });
       }
       onClose();
       router.refresh();

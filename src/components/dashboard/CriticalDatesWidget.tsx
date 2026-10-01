@@ -27,7 +27,7 @@ function countdownText(item: CriticalDateItem): string {
   if (item.kind === "appeal_missing") return "غير مسجّلة";
   const d = item.daysLeft;
   if (d == null) return "—";
-  if (d < 0) return item.kind === "appeal" ? "انقضت" : "فات الموعد";
+  if (d < 0) return item.kind === "appeal" ? "⚠️ فات موعدها" : "فات الموعد";
   if (d === 0) return "اليوم";
   return `متبقٍ ${toEnglishDigits(d)} يومًا`;
 }

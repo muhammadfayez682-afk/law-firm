@@ -1,5 +1,6 @@
 // الوحدة الختامية للقضية: صك الحكم + القطعية + سبب الإغلاق المتعدد (منطق + تسميات).
 import type {
+  CaseType,
   VerdictDegree,
   VerdictResult,
   VerdictFinality,
@@ -7,6 +8,7 @@ import type {
   ClosureReason,
 } from "@prisma/client";
 import { isSystemAdmin, canPerformOnCase, type SessionUser, type CasePermissionInput } from "@/lib/rbac";
+import { isCourtWorkingDay } from "@/lib/judicialCalendar";
 
 export const VERDICT_DEGREE_LABELS_AR: Record<VerdictDegree, string> = {
   first_instance: "ابتدائي",
@@ -31,6 +33,44 @@ export const CASE_CLOSURE_REASON_LABELS_AR: Record<CaseClosureReason, string> = 
   withdrawal: "تنازل",
   dismissal: "شطب",
 };
+
+/**
+ * المدة النظامية لمهلة الاستئناف بالأيام (تقويمية) حسب نوع القضية.
+ * ⚠️ قيم مبدئية قابلة للتعديل — راجعها مقابل الأنظمة السارية:
+ *  - عمالي: 15 يومًا (المحاكم العمالية).
+ *  - تجاري: 30 يومًا (والدعاوى المستعجلة 15 — تُعدَّل يدويًا عند اللزوم).
+ *  - البقية: 30 يومًا افتراضيًا.
+ * المحامي يستطيع تعديل `Case.appealDeadline` يدويًا لاحقًا (الحقل غير مقفل).
+ */
+export const APPEAL_PERIOD_DAYS: Record<CaseType, number> = {
+  general: 30,
+  commercial: 30,
+  labor: 15,
+  personal_status: 30,
+  criminal: 30,
+  administrative: 30,
+  committee: 30,
+  arbitration: 30,
+  debt_collection: 30,
+  other: 30,
+};
+
+/**
+ * يحسب تاريخ مهلة الاستئناف = تاريخ الحكم + المدة النظامية (أيام تقويمية)،
+ * وإن صادف اليوم الأخير عطلة رسمية/نهاية أسبوع يُمدّ لأول يوم عمل (نمط مهل التسوية).
+ */
+export function computeAppealDeadline(caseType: CaseType, verdictDate: Date): Date {
+  const days = APPEAL_PERIOD_DAYS[caseType] ?? 30;
+  const d = new Date(verdictDate);
+  d.setDate(d.getDate() + days);
+  // تمديد إلى أول يوم عمل إن وقع الأجل في عطلة/نهاية أسبوع.
+  let guard = 0;
+  while (!isCourtWorkingDay(d) && guard < 30) {
+    d.setDate(d.getDate() + 1);
+    guard++;
+  }
+  return d;
+}
 
 export function isVerdictDegree(v: unknown): v is VerdictDegree {
   return v === "first_instance" || v === "appeal" || v === "supreme";
